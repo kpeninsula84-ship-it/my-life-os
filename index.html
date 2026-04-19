@@ -222,7 +222,7 @@
       <div class="section" id="section-assets">
         <div class="section-header">
           <div class="section-title" style="margin:0">자산 / 재정</div>
-          <button class="btn btn-primary" onclick="openAssetForm()">+ 추가</button>
+          <button class="btn btn-primary" onclick="openAssetForm()">+ 자산</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
           <div class="card"><div class="stat-label">총 자산</div><div style="font-size:28px;font-weight:700" id="asset-total">₩0</div></div>
@@ -230,6 +230,20 @@
         </div>
         <div id="asset-form-wrap"></div>
         <div id="asset-list"></div>
+
+        <!-- Fixed Expenses sub-section -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:32px 0 14px">
+          <div style="font-size:18px;font-weight:600">고정지출 / 부채</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button id="fe-filter-active" class="btn btn-sm" onclick="setFEFilter('active')">활성만</button>
+            <button id="fe-filter-all" class="btn btn-sm" onclick="setFEFilter('all')">전체</button>
+            <button class="btn btn-primary btn-sm" onclick="openFixedExpenseForm()">+ 추가</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px" id="fe-stats"></div>
+        <div id="fe-breakdown" class="card" style="font-size:13px;line-height:1.8;margin-bottom:14px;display:none"></div>
+        <div id="fe-form-wrap"></div>
+        <div id="fe-list"></div>
       </div>
 
       <!-- Projects -->
@@ -336,7 +350,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-let state = { assets: [], projects: [], todos: [], schedule: [], notes: [], goals: [] };
+let state = { assets: [], projects: [], todos: [], schedule: [], notes: [], goals: [], fixedExpenses: [] };
 let currentUser = null;
 let saveTimer = null;
 let viewingNoteId = null;
@@ -371,6 +385,7 @@ async function loadData() {
     const snap = await getDoc(doc(db, 'users', currentUser.uid, 'dashboard', 'data'));
     if (snap.exists()) state = snap.data();
   } catch(e) { console.error('불러오기 오류:', e); }
+  state.fixedExpenses = state.fixedExpenses || [];
   document.getElementById('loading').style.display = 'none';
   renderAll();
 }
@@ -417,7 +432,7 @@ window.goTo = (section) => {
 };
 
 function renderAll() {
-  renderOverview(); renderAssets(); renderProjects();
+  renderOverview(); renderAssets(); renderFixedExpenses(); renderProjects();
   renderTodos(); renderSchedule(); renderNotes(); renderGoals();
   document.getElementById('section-overview').classList.add('active');
 }
@@ -509,6 +524,205 @@ window.saveAsset = (id) => {
   renderAssets(); renderOverview(); saveData();
 };
 window.deleteAsset = (id) => { state.assets = state.assets.filter(x => x.id !== id); renderAssets(); renderOverview(); saveData(); };
+
+// ── FIXED EXPENSES ────────────────────────────────────────────────
+const FE_CATEGORIES = ['주거','구독','통신','보험','교통','교육','할부','대출','기타'];
+const FE_TYPES = ['일반','할부','대출'];
+const FE_FREQS = ['매월','매년'];
+let feFilter = 'active';
+
+const monthlyOf = (e) => {
+  const amt = Number(e.amount || 0);
+  if (e.frequency === '매년') return amt / 12;
+  return amt;
+};
+
+const isInstallmentDone = (e) => e.type === '할부' && Number(e.currentInstallment||0) >= Number(e.totalInstallments||0) && Number(e.totalInstallments||0) > 0;
+
+const remainingDebtOf = (e) => {
+  if (e.type === '할부') {
+    const remain = Math.max(0, Number(e.totalInstallments||0) - Number(e.currentInstallment||0));
+    return remain * Number(e.amount||0);
+  }
+  if (e.type === '대출') return Number(e.remainingPrincipal||0);
+  return 0;
+};
+
+const nextPayDays = (e) => {
+  const day = Number(e.payDay||0);
+  if (!day) return Infinity;
+  const now = new Date();
+  const today = now.getDate();
+  if (e.frequency === '매월') {
+    if (day >= today) return day - today;
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    return (daysInMonth - today) + day;
+  }
+  if (e.frequency === '매년') {
+    const month = Number(e.payMonth||0);
+    if (!month) return Infinity;
+    const target = new Date(now.getFullYear(), month-1, day);
+    if (target < now) target.setFullYear(target.getFullYear()+1);
+    return Math.ceil((target - now) / (1000*60*60*24));
+  }
+  return Infinity;
+};
+
+const formatPayDate = (e) => {
+  if (e.frequency === '매월' && e.payDay) return `매월 ${e.payDay}일`;
+  if (e.frequency === '매년' && e.payMonth && e.payDay) return `매년 ${e.payMonth}월 ${e.payDay}일`;
+  if (e.frequency === '매년') return '매년';
+  return '매월';
+};
+
+function renderFixedExpenses() {
+  const all = state.fixedExpenses || [];
+  const filtered = feFilter === 'active' ? all.filter(e => e.active !== false && !isInstallmentDone(e)) : all;
+
+  const monthlyTotal = filtered.reduce((s,e) => s + monthlyOf(e), 0);
+  const debtTotal = filtered.reduce((s,e) => s + remainingDebtOf(e), 0);
+  const upcomingCount = filtered.filter(e => nextPayDays(e) <= 7).length;
+
+  document.getElementById('fe-stats').innerHTML = `
+    <div class="card"><div class="stat-label">월 고정지출</div><div style="font-size:22px;font-weight:700;color:#f0a742">₩${Math.round(monthlyTotal).toLocaleString()}</div></div>
+    <div class="card"><div class="stat-label">총 부채</div><div style="font-size:22px;font-weight:700;color:#e25c5c">₩${Math.round(debtTotal).toLocaleString()}</div></div>
+    <div class="card"><div class="stat-label">7일 내 결제</div><div style="font-size:22px;font-weight:700;color:#a78bfa">${upcomingCount}건</div></div>
+  `;
+
+  const byCat = FE_CATEGORIES.map(c => ({ c, sum: filtered.filter(e => e.category === c).reduce((s,e)=>s+monthlyOf(e), 0) })).filter(x => x.sum > 0);
+  const breakdownEl = document.getElementById('fe-breakdown');
+  if (byCat.length) {
+    breakdownEl.style.display = '';
+    breakdownEl.innerHTML = byCat.map(x => `<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">${x.c}</span><span>₩${Math.round(x.sum).toLocaleString()}</span></div>`).join('');
+  } else {
+    breakdownEl.style.display = 'none';
+  }
+
+  document.getElementById('fe-filter-active').classList.toggle('btn-primary', feFilter==='active');
+  document.getElementById('fe-filter-all').classList.toggle('btn-primary', feFilter==='all');
+
+  const sorted = [...filtered].sort((a,b) => nextPayDays(a) - nextPayDays(b));
+  document.getElementById('fe-list').innerHTML = sorted.map(e => {
+    const days = nextPayDays(e);
+    const dayLabel = days === Infinity ? '' : days === 0 ? '오늘' : `D-${days}`;
+    const inactive = e.active === false || isInstallmentDone(e);
+    const typeBadge = e.type && e.type !== '일반' ? `<span class="badge ${e.type==='할부'?'badge-purple':'badge-yellow'}" style="font-size:10px">${e.type}</span>` : '';
+    let extraInfo = '';
+    if (e.type === '할부') {
+      const total = Number(e.totalInstallments||0);
+      const cur = Number(e.currentInstallment||0);
+      const remain = Math.max(0, total - cur);
+      extraInfo = ` · ${cur}/${total}회 · 남은 ₩${(remain * Number(e.amount||0)).toLocaleString()}`;
+    } else if (e.type === '대출') {
+      extraInfo = ` · 잔여 ₩${Number(e.remainingPrincipal||0).toLocaleString()}`;
+    }
+    return `<div class="list-item" style="${inactive?'opacity:0.5':''}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span>${e.name}</span>
+          ${typeBadge}
+          <span class="badge badge-gray" style="font-size:10px">${e.category||'기타'}</span>
+          ${dayLabel?`<span style="font-size:11px;color:${days<=3?'var(--danger)':days<=7?'var(--warning)':'var(--text3)'}">${dayLabel}</span>`:''}
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-top:3px">₩${Number(e.amount||0).toLocaleString()} · ${formatPayDate(e)}${extraInfo}</div>
+        ${e.memo?`<div style="font-size:12px;color:var(--text3);margin-top:3px">${e.memo}</div>`:''}
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm" onclick="toggleFEActive('${e.id}')" title="${e.active===false?'활성화':'비활성화'}">${e.active===false?'▶':'⏸'}</button>
+        <button class="btn btn-sm" onclick="editFixedExpense('${e.id}')">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteFixedExpense('${e.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('') || `<div class="empty">${feFilter==='active'?'활성 항목이 없습니다':'고정지출을 추가해보세요'}</div>`;
+}
+
+window.setFEFilter = (f) => { feFilter = f; renderFixedExpenses(); };
+
+window.openFixedExpenseForm = (id) => {
+  const e = id ? state.fixedExpenses.find(x => x.id === id) : { type:'일반', frequency:'매월', category:'구독', active:true };
+  document.getElementById('fe-form-wrap').innerHTML = `
+    <div class="form-card">
+      <input id="fef-name" placeholder="이름 (예: 넷플릭스, 아이폰 할부)" value="${e.name||''}" style="margin-bottom:8px;font-size:15px">
+      <div class="form-row cols-3">
+        <input type="number" id="fef-amount" placeholder="월 금액 / 회당" value="${e.amount||''}" min="0">
+        <select id="fef-frequency" onchange="onFEFreqChange()">${FE_FREQS.map(f=>`<option ${e.frequency===f?'selected':''}>${f}</option>`).join('')}</select>
+        <select id="fef-type" onchange="onFETypeChange()">${FE_TYPES.map(t=>`<option ${e.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      <div class="form-row cols-3">
+        <select id="fef-category">${FE_CATEGORIES.map(c=>`<option ${e.category===c?'selected':''}>${c}</option>`).join('')}</select>
+        <input type="number" id="fef-month" placeholder="결제 월 (1-12)" value="${e.payMonth||''}" min="1" max="12" style="display:${e.frequency==='매년'?'':'none'}">
+        <input type="number" id="fef-day" placeholder="결제일 (1-31)" value="${e.payDay||''}" min="1" max="31">
+      </div>
+      <div id="fef-installment-row" class="form-row cols-2" style="display:${e.type==='할부'?'grid':'none'}">
+        <input type="number" id="fef-cur" placeholder="현재 회차" value="${e.currentInstallment||''}" min="0">
+        <input type="number" id="fef-total" placeholder="총 회차" value="${e.totalInstallments||''}" min="1">
+      </div>
+      <div id="fef-loan-row" style="display:${e.type==='대출'?'block':'none'};margin-bottom:8px">
+        <input type="number" id="fef-principal" placeholder="잔여 원금" value="${e.remainingPrincipal||''}" min="0">
+      </div>
+      <input id="fef-memo" placeholder="메모 (선택)" value="${e.memo||''}" style="margin-bottom:8px">
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveFixedExpense('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('fe-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+
+window.onFEFreqChange = () => {
+  const freq = document.getElementById('fef-frequency').value;
+  document.getElementById('fef-month').style.display = freq === '매년' ? '' : 'none';
+};
+
+window.onFETypeChange = () => {
+  const type = document.getElementById('fef-type').value;
+  document.getElementById('fef-installment-row').style.display = type === '할부' ? 'grid' : 'none';
+  document.getElementById('fef-loan-row').style.display = type === '대출' ? 'block' : 'none';
+  if (type === '할부' || type === '대출') {
+    const catSelect = document.getElementById('fef-category');
+    if (type === '할부' && catSelect.value !== '할부') catSelect.value = '할부';
+    if (type === '대출' && catSelect.value !== '대출') catSelect.value = '대출';
+  }
+};
+
+window.editFixedExpense = (id) => openFixedExpenseForm(id);
+
+window.saveFixedExpense = (id) => {
+  const name = document.getElementById('fef-name').value.trim();
+  if (!name) return;
+  const type = document.getElementById('fef-type').value;
+  const e = {
+    name,
+    amount: Number(document.getElementById('fef-amount').value) || 0,
+    frequency: document.getElementById('fef-frequency').value,
+    category: document.getElementById('fef-category').value,
+    type,
+    payDay: Number(document.getElementById('fef-day').value) || 0,
+    payMonth: Number(document.getElementById('fef-month').value) || 0,
+    memo: document.getElementById('fef-memo').value.trim(),
+    active: true,
+  };
+  if (type === '할부') {
+    e.currentInstallment = Number(document.getElementById('fef-cur').value) || 0;
+    e.totalInstallments = Number(document.getElementById('fef-total').value) || 0;
+  } else if (type === '대출') {
+    e.remainingPrincipal = Number(document.getElementById('fef-principal').value) || 0;
+  }
+  if (id) state.fixedExpenses = state.fixedExpenses.map(x => x.id === id ? {...x, ...e} : x);
+  else state.fixedExpenses.push({ id: uid(), ...e });
+  document.getElementById('fe-form-wrap').innerHTML = '';
+  renderFixedExpenses(); saveData();
+};
+
+window.deleteFixedExpense = (id) => {
+  if (!confirm('이 항목을 삭제할까요?')) return;
+  state.fixedExpenses = state.fixedExpenses.filter(x => x.id !== id);
+  renderFixedExpenses(); saveData();
+};
+
+window.toggleFEActive = (id) => {
+  state.fixedExpenses = state.fixedExpenses.map(x => x.id === id ? {...x, active: x.active === false} : x);
+  renderFixedExpenses(); saveData();
+};
 
 // ── PROJECTS ──────────────────────────────────────────────────────
 const STATUSES = ['계획중','진행중','완료','보류'];
