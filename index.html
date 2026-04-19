@@ -102,6 +102,22 @@
     /* Todo */
     .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; transition: opacity 0.2s; }
     .todo-item.done { opacity: 0.45; }
+    .todo-item.task:hover { border-color: var(--text3); }
+    .status-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; user-select: none; padding: 4px 0; }
+    .status-section-header:hover { opacity: 0.85; }
+
+    /* Side panel */
+    .side-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 99; }
+    .side-panel-overlay.open { opacity: 1; pointer-events: auto; }
+    .side-panel { position: fixed; top: 0; right: -520px; width: 520px; max-width: 92vw; height: 100vh; background: var(--bg2); border-left: 1px solid var(--border); transition: right 0.25s; z-index: 100; display: flex; flex-direction: column; }
+    .side-panel.open { right: 0; }
+    .side-panel-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .side-panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+    .panel-title { flex: 1; border: none; background: transparent; font-size: 17px; font-weight: 600; padding: 4px 6px; border-radius: 6px; }
+    .panel-title:hover, .panel-title:focus { background: var(--bg3); }
+    .comment-item { padding: 10px 12px; background: var(--bg3); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+    .comment-item.system { background: transparent; border-left: 2px solid var(--border); padding: 4px 12px; color: var(--text2); font-size: 12px; margin-bottom: 4px; }
+    .comment-time { font-size: 11px; color: var(--text3); margin-top: 4px; }
 
     /* Notes */
     .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
@@ -232,13 +248,13 @@
           <div class="section-title" style="margin:0">업무 / 할일</div>
           <span id="todo-count" style="font-size:13px;color:var(--text2)"></span>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
           <input id="todo-input" placeholder="할일 입력... (Enter로 추가)" style="flex:1;min-width:150px" onkeydown="if(event.key==='Enter')addTodo()">
           <select id="todo-priority" style="width:90px"><option>높음</option><option selected>중간</option><option>낮음</option></select>
           <input type="date" id="todo-due" style="width:140px">
           <button class="btn btn-primary" onclick="addTodo()">추가</button>
+          <button class="btn" onclick="addTask()" title="상세 업무 추가">+ 업무</button>
         </div>
-        <div class="filter-tabs" id="todo-filters"></div>
         <div id="todo-list"></div>
       </div>
 
@@ -288,6 +304,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Task detail side panel -->
+  <div id="side-panel-overlay" class="side-panel-overlay" onclick="closeTaskDetail()"></div>
+  <div id="side-panel" class="side-panel"></div>
 </div>
 
 <script type="module">
@@ -313,9 +333,10 @@ let state = { assets: [], projects: [], todos: [], schedule: [], notes: [], goal
 let currentUser = null;
 let saveTimer = null;
 let viewingNoteId = null;
-let currentTodoFilter = '미완료';
 let currentProjectFilter = '전체';
 let expandedGoals = new Set();
+let currentTaskDetailId = null;
+let collapsedTodoSections = new Set();
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const today = () => new Date().toISOString().split('T')[0];
@@ -387,7 +408,7 @@ function renderAll() {
 // ── OVERVIEW ──────────────────────────────────────────────────────
 function renderOverview() {
   const total = state.assets.reduce((s, a) => s + Number(a.amount || 0), 0);
-  const doneTodos = state.todos.filter(t => t.done).length;
+  const doneTodos = state.todos.filter(isDone).length;
   const upcomingCount = state.schedule.filter(e => e.date >= today()).length;
   const activeProj = state.projects.filter(p => p.status === '진행중').length;
 
@@ -400,9 +421,9 @@ function renderOverview() {
     { label: '목표', value: state.goals.length + '개', section: 'goals', color: '#888' },
   ].map(s => `<div class="stat-card" onclick="goTo('${s.section}')"><div class="stat-label">${s.label}</div><div class="stat-value" style="color:${s.color}">${s.value}</div></div>`).join('');
 
-  const pendingTodos = state.todos.filter(t => !t.done).slice(0, 5);
+  const pendingTodos = state.todos.filter(t => !isDone(t)).slice(0, 5);
   document.getElementById('overview-todos').innerHTML = pendingTodos.length
-    ? pendingTodos.map(t => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${t.text}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${t.due}</span>`:''}</div>`).join('')
+    ? pendingTodos.map(t => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${t.text}${t.type==='task'?`<span class="badge ${SCOL[t.status||'Todo']}" style="margin-left:6px;font-size:10px;padding:1px 7px">${t.status||'Todo'}</span>`:''}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${t.due}</span>`:''}</div>`).join('')
     : '<div style="font-size:13px;color:var(--text2)">모두 완료! 🎉</div>';
 
   const todaySched = state.schedule.filter(e => e.date === today());
@@ -596,23 +617,136 @@ window.addProjectTodo = (pid) => {
 
 // ── TODOS ─────────────────────────────────────────────────────────
 const PCOL = { '높음':'var(--danger)','중간':'var(--warning)','낮음':'var(--success)' };
+const TASK_STATUSES = ['Todo','In Progress','Done'];
+const SCOL = { 'Todo':'badge-blue','In Progress':'badge-yellow','Done':'badge-green' };
+
+const isDone = (t) => t.type === 'task' ? t.status === 'Done' : !!t.done;
+const escapeAttr = (s) => (s||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const formatTs = (ts) => {
+  const d = new Date(ts);
+  return d.toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+};
 
 function renderTodos() {
-  document.getElementById('todo-count').textContent = `${state.todos.filter(t=>t.done).length} / ${state.todos.length} 완료`;
-  document.getElementById('todo-filters').innerHTML = ['미완료','완료','전체'].map(f =>
-    `<button class="filter-tab ${currentTodoFilter===f?'active':''}" onclick="setTF('${f}')">${f}</button>`).join('');
-  const filtered = currentTodoFilter==='전체' ? state.todos : currentTodoFilter==='미완료' ? state.todos.filter(t=>!t.done) : state.todos.filter(t=>t.done);
-  document.getElementById('todo-list').innerHTML = filtered.map(t =>
-    `<div class="todo-item ${t.done?'done':''}">
-      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo('${t.id}')">
-      <div style="flex:1;font-size:14px;${t.done?'text-decoration:line-through;':''}">${t.text}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:8px">${t.due}</span>`:''}</div>
-      <span style="font-size:11px;font-weight:500;color:${PCOL[t.priority]}">${t.priority}</span>
-      <button class="btn btn-sm btn-danger" onclick="deleteTodo('${t.id}')">✕</button>
-    </div>`
-  ).join('') || `<div class="empty">${currentTodoFilter==='미완료'?'할일 없음! 🎉':'항목이 없습니다'}</div>`;
+  const total = state.todos.length;
+  const done = state.todos.filter(isDone).length;
+  document.getElementById('todo-count').textContent = `${done} / ${total} 완료`;
+
+  const buckets = { 'Todo': [], 'In Progress': [], 'Done': [] };
+  state.todos.forEach(t => {
+    if (t.type === 'task') buckets[TASK_STATUSES.includes(t.status) ? t.status : 'Todo'].push(t);
+    else buckets[t.done ? 'Done' : 'Todo'].push(t);
+  });
+
+  document.getElementById('todo-list').innerHTML = TASK_STATUSES.map(s => {
+    const items = buckets[s];
+    const collapsed = collapsedTodoSections.has(s);
+    return `<div style="margin-bottom:18px">
+      <div class="status-section-header" onclick="toggleTodoSection('${s}')">
+        <span style="font-size:10px;color:var(--text3);width:10px">${collapsed?'▶':'▼'}</span>
+        <span class="badge ${SCOL[s]}">${s}</span>
+        <span style="font-size:12px;color:var(--text2)">${items.length}</span>
+      </div>
+      ${!collapsed ? (items.length ? items.map(renderTodoItem).join('') : '<div class="empty" style="padding:12px;font-size:13px">없음</div>') : ''}
+    </div>`;
+  }).join('');
 }
 
-window.setTF = (f) => { currentTodoFilter = f; renderTodos(); };
+function renderTodoItem(t) {
+  if (t.type === 'task') return renderTaskItem(t);
+  return renderSimpleItem(t);
+}
+
+function renderSimpleItem(t) {
+  return `<div class="todo-item ${t.done?'done':''}">
+    <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo('${t.id}')">
+    <div style="flex:1;font-size:14px;${t.done?'text-decoration:line-through':''}">${t.text}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:8px">${t.due}</span>`:''}</div>
+    <span style="font-size:11px;font-weight:500;color:${PCOL[t.priority]||'var(--text2)'}">${t.priority||''}</span>
+    <button class="btn btn-ghost btn-sm" onclick="promoteToTask('${t.id}')" title="업무로 전환">↗</button>
+    <button class="btn btn-sm btn-danger" onclick="deleteTodo('${t.id}')">✕</button>
+  </div>`;
+}
+
+function renderTaskItem(t) {
+  const cmCount = (t.comments||[]).length;
+  const meta = (t.due || cmCount > 0 || t.description) ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px">
+    ${t.due?`<span>📅 ${t.due}</span>`:''}
+    ${cmCount>0?`<span>💬 ${cmCount}</span>`:''}
+    ${t.description?`<span>📝</span>`:''}
+  </div>` : '';
+  return `<div class="todo-item task" style="cursor:pointer" onclick="openTaskDetail('${t.id}')">
+    <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${PCOL[t.priority]||'var(--text2)'};flex-shrink:0" title="${t.priority||''}"></span>
+    <div style="flex:1;font-size:14px;min-width:0">
+      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.text}</div>
+      ${meta}
+    </div>
+    <span class="badge ${SCOL[t.status||'Todo']}">${t.status||'Todo'}</span>
+  </div>`;
+}
+
+function renderTaskDetail(t) {
+  const comments = (t.comments||[]).slice().sort((a,b) => (a.ts||0) - (b.ts||0));
+  return `
+    <div class="side-panel-header">
+      <input id="td-text" class="panel-title" value="${escapeAttr(t.text)}" onblur="updateTaskField('${t.id}','text',this.value)">
+      <button class="btn btn-ghost" onclick="closeTaskDetail()">✕</button>
+    </div>
+    <div class="side-panel-body">
+      <div class="form-row cols-3" style="margin-bottom:14px">
+        <select id="td-status" onchange="updateTaskStatus('${t.id}', this.value)">
+          ${TASK_STATUSES.map(s=>`<option ${(t.status||'Todo')===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <select id="td-priority" onchange="updateTaskField('${t.id}','priority',this.value)">
+          ${['높음','중간','낮음'].map(p=>`<option ${(t.priority||'중간')===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <input type="date" id="td-due" value="${t.due||''}" onchange="updateTaskField('${t.id}','due',this.value)">
+      </div>
+      <div style="margin-bottom:18px">
+        <div class="form-label">설명</div>
+        <textarea id="td-desc" placeholder="설명 추가..." style="height:90px;resize:vertical" onblur="updateTaskField('${t.id}','description',this.value)">${t.description||''}</textarea>
+      </div>
+      <div style="margin-bottom:14px">
+        <div class="form-label">활동 / 코멘트</div>
+        <div id="td-comments">${comments.length ? comments.map(c => renderComment(t.id, c)).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0">아직 코멘트 없음</div>'}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:24px">
+        <input id="td-comment-input" placeholder="코멘트 작성... (Enter)" onkeydown="if(event.key==='Enter')addComment('${t.id}')" style="flex:1">
+        <button class="btn btn-primary" onclick="addComment('${t.id}')">남기기</button>
+      </div>
+      <div style="padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="convertToSimple('${t.id}')" title="단순 할일로 변환">↩ 단순 할일로</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteTaskFromDetail('${t.id}')">삭제</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderComment(taskId, c) {
+  if (c.system) {
+    return `<div class="comment-item system">${c.text}<span style="margin-left:8px;color:var(--text3)">${formatTs(c.ts)}</span></div>`;
+  }
+  return `<div class="comment-item">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;white-space:pre-wrap;word-break:break-word">${c.text}</div>
+      <button onclick="deleteComment('${taskId}','${c.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0;line-height:1">×</button>
+    </div>
+    <div class="comment-time">${formatTs(c.ts)}</div>
+  </div>`;
+}
+
+function refreshTaskDetail(id) {
+  if (currentTaskDetailId !== id) return;
+  const t = state.todos.find(x => x.id === id);
+  if (!t) return closeTaskDetail();
+  document.getElementById('side-panel').innerHTML = renderTaskDetail(t);
+}
+
+window.toggleTodoSection = (s) => {
+  if (collapsedTodoSections.has(s)) collapsedTodoSections.delete(s);
+  else collapsedTodoSections.add(s);
+  renderTodos();
+};
+
 window.addTodo = () => {
   const text = document.getElementById('todo-input').value.trim();
   if (!text) return;
@@ -621,8 +755,118 @@ window.addTodo = () => {
   document.getElementById('todo-due').value = '';
   renderTodos(); renderOverview(); saveData();
 };
-window.toggleTodo = (id) => { state.todos = state.todos.map(t => t.id===id?{...t,done:!t.done}:t); renderTodos(); renderOverview(); saveData(); };
-window.deleteTodo = (id) => { state.todos = state.todos.filter(t => t.id!==id); renderTodos(); renderOverview(); saveData(); };
+window.toggleTodo = (id) => {
+  state.todos = state.todos.map(t => t.id===id && t.type!=='task' ? {...t,done:!t.done} : t);
+  renderTodos(); renderOverview(); saveData();
+};
+window.deleteTodo = (id) => {
+  state.todos = state.todos.filter(t => t.id!==id);
+  renderTodos(); renderOverview(); saveData();
+};
+
+window.addTask = () => {
+  const t = {
+    id: uid(),
+    type: 'task',
+    text: '새 업무',
+    status: 'Todo',
+    priority: '중간',
+    due: '',
+    description: '',
+    comments: [{ id: uid(), text: '생성됨', ts: Date.now(), system: true }]
+  };
+  state.todos.push(t);
+  renderTodos(); renderOverview(); saveData();
+  openTaskDetail(t.id);
+  setTimeout(() => {
+    const inp = document.getElementById('td-text');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 50);
+};
+
+window.openTaskDetail = (id) => {
+  const t = state.todos.find(x => x.id === id);
+  if (!t || t.type !== 'task') return;
+  currentTaskDetailId = id;
+  document.getElementById('side-panel').innerHTML = renderTaskDetail(t);
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('side-panel-overlay').classList.add('open');
+};
+
+window.closeTaskDetail = () => {
+  currentTaskDetailId = null;
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('side-panel-overlay').classList.remove('open');
+};
+
+window.updateTaskField = (id, field, value) => {
+  state.todos = state.todos.map(t => t.id === id ? {...t, [field]: value} : t);
+  renderTodos(); renderOverview(); saveData();
+};
+
+window.updateTaskStatus = (id, newStatus) => {
+  const t = state.todos.find(x => x.id === id);
+  if (!t) return;
+  const oldStatus = t.status || 'Todo';
+  if (oldStatus === newStatus) return;
+  const sys = { id: uid(), text: `상태: ${oldStatus} → ${newStatus}`, ts: Date.now(), system: true };
+  state.todos = state.todos.map(x => x.id === id ? {...x, status: newStatus, comments: [...(x.comments||[]), sys]} : x);
+  refreshTaskDetail(id);
+  renderTodos(); renderOverview(); saveData();
+};
+
+window.addComment = (id) => {
+  const input = document.getElementById('td-comment-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  const c = { id: uid(), text, ts: Date.now() };
+  state.todos = state.todos.map(t => t.id === id ? {...t, comments: [...(t.comments||[]), c]} : t);
+  refreshTaskDetail(id);
+  setTimeout(() => document.getElementById('td-comment-input')?.focus(), 0);
+  renderTodos(); saveData();
+};
+
+window.deleteComment = (taskId, commentId) => {
+  state.todos = state.todos.map(t => t.id === taskId ? {...t, comments: (t.comments||[]).filter(c => c.id !== commentId)} : t);
+  refreshTaskDetail(taskId);
+  renderTodos(); saveData();
+};
+
+window.deleteTaskFromDetail = (id) => {
+  if (!confirm('이 업무를 삭제할까요?')) return;
+  state.todos = state.todos.filter(t => t.id !== id);
+  closeTaskDetail();
+  renderTodos(); renderOverview(); saveData();
+};
+
+window.promoteToTask = (id) => {
+  const t = state.todos.find(x => x.id === id);
+  if (!t) return;
+  const sys = { id: uid(), text: '업무로 전환됨', ts: Date.now(), system: true };
+  state.todos = state.todos.map(x => x.id === id ? {
+    id: x.id, type: 'task', text: x.text,
+    status: x.done ? 'Done' : 'Todo',
+    priority: x.priority || '중간',
+    due: x.due || '',
+    description: '',
+    comments: [sys]
+  } : x);
+  renderTodos(); renderOverview(); saveData();
+  openTaskDetail(id);
+};
+
+window.convertToSimple = (id) => {
+  if (!confirm('단순 할일로 변환하면 설명과 코멘트가 사라집니다. 계속할까요?')) return;
+  state.todos = state.todos.map(x => x.id === id ? {
+    id: x.id, text: x.text,
+    done: x.status === 'Done',
+    priority: x.priority || '중간',
+    due: x.due || ''
+  } : x);
+  closeTaskDetail();
+  renderTodos(); renderOverview(); saveData();
+};
 
 // ── SCHEDULE ──────────────────────────────────────────────────────
 const ETYPES = ['업무','미팅','개발','개인','기타'];
