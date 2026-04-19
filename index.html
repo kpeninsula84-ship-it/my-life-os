@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Life OS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0f0f0f; --bg2: #1a1a1a; --bg3: #242424;
+      --border: #2a2a2a; --text: #e8e8e8; --text2: #888; --text3: #555;
+      --accent: #4f9cf9; --success: #4caf7d; --warning: #f0a742; --danger: #e25c5c;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Login */
+    #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 48px 40px; text-align: center; max-width: 360px; width: 90%; }
+    .login-logo { font-size: 36px; margin-bottom: 12px; }
+    .login-title { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .login-sub { color: var(--text2); font-size: 14px; margin-bottom: 32px; }
+    .btn-google { display: flex; align-items: center; gap: 12px; padding: 13px 24px; font-size: 15px; border-radius: 10px; background: #fff; color: #333; border: none; cursor: pointer; font-family: inherit; font-weight: 500; width: 100%; justify-content: center; transition: opacity 0.15s; }
+    .btn-google:hover { opacity: 0.9; }
+
+    /* Layout */
+    #app { display: none; min-height: 100vh; }
+    .layout { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar { width: 210px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; position: sticky; top: 0; height: 100vh; }
+    .sidebar-header { padding: 20px 16px 12px; }
+    .sidebar-logo { font-size: 11px; letter-spacing: 0.1em; color: var(--text3); font-weight: 500; }
+    .nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 16px; border: none; background: transparent; color: var(--text2); font-size: 13px; cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s; position: relative; }
+    .nav-btn:hover { color: var(--text); background: var(--bg3); }
+    .nav-btn.active { color: var(--text); background: var(--bg3); }
+    .nav-btn.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); border-radius: 0 2px 2px 0; }
+    .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+    .sidebar-bottom { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
+    .user-email { font-size: 11px; color: var(--text3); margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-name { font-size: 13px; color: var(--text2); margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Main */
+    .main { flex: 1; padding: 32px; overflow-y: auto; min-width: 0; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .section-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+
+    /* Buttons */
+    .btn { padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+    .btn:hover { border-color: var(--text3); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-danger { color: var(--danger) !important; border-color: transparent; background: transparent; }
+    .btn-danger:hover { background: rgba(226,92,92,0.08); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-ghost { background: transparent; border-color: transparent; color: var(--text2); }
+    .btn-ghost:hover { color: var(--text); background: var(--bg3); }
+
+    /* Cards */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+    .stat-card:hover { border-color: var(--text3); }
+    .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+
+    /* Forms */
+    .form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; }
+    input, select, textarea { width: 100%; padding: 9px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    input[type=range] { padding: 0; background: transparent; border: none; accent-color: var(--accent); }
+    input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+    select option { background: var(--bg3); }
+    .form-row { display: grid; gap: 8px; margin-bottom: 8px; }
+    .cols-2 { grid-template-columns: 1fr 1fr; }
+    .cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .form-label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 4px; }
+
+    /* List */
+    .list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; gap: 10px; }
+    .item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+    /* Progress */
+    .progress-bar { height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; background: var(--accent); }
+
+    /* Badge */
+    .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+    .badge-blue { background: rgba(79,156,249,0.12); color: #4f9cf9; }
+    .badge-green { background: rgba(76,175,125,0.12); color: #4caf7d; }
+    .badge-yellow { background: rgba(240,167,66,0.12); color: #f0a742; }
+    .badge-gray { background: var(--bg3); color: var(--text2); }
+
+    /* Filter tabs */
+    .filter-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filter-tab { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+    .filter-tab.active { background: var(--bg3); color: var(--text); border-color: var(--text3); }
+
+    /* Todo */
+    .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; transition: opacity 0.2s; }
+    .todo-item.done { opacity: 0.45; }
+
+    /* Notes */
+    .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .note-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; cursor: pointer; transition: border-color 0.15s; }
+    .note-card:hover { border-color: var(--text3); }
+
+    /* Event */
+    .event-accent { width: 3px; height: 40px; border-radius: 2px; flex-shrink: 0; }
+
+    /* Goal KR */
+    .kr-item { padding: 10px 0 6px 14px; border-left: 2px solid var(--border); margin-bottom: 8px; }
+
+    /* Two-col overview grid */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+    /* Empty state */
+    .empty { color: var(--text2); font-size: 14px; text-align: center; padding: 40px 20px; }
+
+    /* Loading */
+    #loading { color: var(--text2); font-size: 14px; text-align: center; padding: 60px; display: none; }
+
+    /* Mobile */
+    @media (max-width: 640px) {
+      .sidebar { width: 56px; }
+      .sidebar-logo, .nav-btn span:not(.nav-icon), .user-name, .user-email { display: none; }
+      .nav-btn { justify-content: center; padding: 14px; }
+      .sidebar-bottom { padding: 10px; }
+      .main { padding: 16px; }
+      .two-col { grid-template-columns: 1fr; }
+      .cols-3 { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">⊞</div>
+    <div class="login-title">My Life OS</div>
+    <div class="login-sub">나만의 개인 대시보드</div>
+    <button class="btn-google" id="login-btn">
+      <svg width="18" height="18" viewBox="0 0 18 18">
+        <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+        <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+        <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/>
+      </svg>
+      Google로 로그인
+    </button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">MY LIFE OS</div>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-section="overview"><span class="nav-icon">⊞</span><span>대시보드</span></button>
+        <button class="nav-btn" data-section="assets"><span class="nav-icon">₩</span><span>자산 / 재정</span></button>
+        <button class="nav-btn" data-section="projects"><span class="nav-icon">◈</span><span>개발 프로젝트</span></button>
+        <button class="nav-btn" data-section="todos"><span class="nav-icon">✓</span><span>업무 / 할일</span></button>
+        <button class="nav-btn" data-section="schedule"><span class="nav-icon">◷</span><span>일정 / 스케줄</span></button>
+        <button class="nav-btn" data-section="notes"><span class="nav-icon">≡</span><span>메모 / 아이디어</span></button>
+        <button class="nav-btn" data-section="goals"><span class="nav-icon">◎</span><span>목표 / OKR</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-name" id="user-name"></div>
+        <div class="user-email" id="user-email"></div>
+        <button class="btn btn-sm btn-ghost" id="logout-btn" style="width:100%">로그아웃</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div id="loading">불러오는 중...</div>
+
+      <!-- Overview -->
+      <div class="section" id="section-overview">
+        <div class="section-title">대시보드</div>
+        <div class="stat-grid" id="overview-stats"></div>
+        <div class="two-col">
+          <div class="card">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">미완료 할일</div>
+            <div id="overview-todos"></div>
+          </div>
+          <div class="card">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">오늘 일정</div>
+            <div id="overview-schedule"></div>
+          </div>
+        </div>
+        <div class="card" id="overview-goals-card" style="display:none">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em">목표 진행률</div>
+          <div id="overview-goals"></div>
+        </div>
+      </div>
+
+      <!-- Assets -->
+      <div class="section" id="section-assets">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">자산 / 재정</div>
+          <button class="btn btn-primary" onclick="openAssetForm()">+ 추가</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <div class="card"><div class="stat-label">총 자산</div><div style="font-size:28px;font-weight:700" id="asset-total">₩0</div></div>
+          <div class="card" style="font-size:13px;line-height:1.8" id="asset-breakdown"></div>
+        </div>
+        <div id="asset-form-wrap"></div>
+        <div id="asset-list"></div>
+      </div>
+
+      <!-- Projects -->
+      <div class="section" id="section-projects">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">개발 프로젝트</div>
+          <button class="btn btn-primary" onclick="openProjectForm()">+ 추가</button>
+        </div>
+        <div class="filter-tabs" id="project-filters"></div>
+        <div id="project-form-wrap"></div>
+        <div id="project-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px"></div>
+      </div>
+
+      <!-- Todos -->
+      <div class="section" id="section-todos">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">업무 / 할일</div>
+          <span id="todo-count" style="font-size:13px;color:var(--text2)"></span>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <input id="todo-input" placeholder="할일 입력... (Enter로 추가)" style="flex:1;min-width:150px" onkeydown="if(event.key==='Enter')addTodo()">
+          <select id="todo-priority" style="width:90px"><option>높음</option><option selected>중간</option><option>낮음</option></select>
+          <input type="date" id="todo-due" style="width:140px">
+          <button class="btn btn-primary" onclick="addTodo()">추가</button>
+        </div>
+        <div class="filter-tabs" id="todo-filters"></div>
+        <div id="todo-list"></div>
+      </div>
+
+      <!-- Schedule -->
+      <div class="section" id="section-schedule">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">일정 / 스케줄</div>
+          <button class="btn btn-primary" onclick="openScheduleForm()">+ 추가</button>
+        </div>
+        <div id="schedule-form-wrap"></div>
+        <div id="schedule-upcoming-label" style="font-size:12px;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em"></div>
+        <div id="schedule-upcoming"></div>
+        <div id="schedule-past-label" style="font-size:12px;color:var(--text2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.04em;display:none">지난 일정</div>
+        <div id="schedule-past" style="opacity:0.5"></div>
+      </div>
+
+      <!-- Notes -->
+      <div class="section" id="section-notes">
+        <div id="notes-list-view">
+          <div class="section-header">
+            <div class="section-title" style="margin:0">메모 / 아이디어</div>
+            <button class="btn btn-primary" onclick="openNoteForm()">+ 새 메모</button>
+          </div>
+          <input id="note-search" placeholder="검색..." style="margin-bottom:14px" oninput="renderNotes()">
+          <div id="note-form-wrap"></div>
+          <div id="notes-grid" class="notes-grid"></div>
+        </div>
+        <div id="notes-detail-view" style="display:none">
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="closeNoteDetail()">← 목록</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:22px;font-weight:700" id="note-detail-title"></div>
+            <button class="btn btn-sm" onclick="editCurrentNote()">수정</button>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:24px" id="note-detail-date"></div>
+          <div style="font-size:15px;line-height:1.85;white-space:pre-wrap" id="note-detail-content"></div>
+        </div>
+      </div>
+
+      <!-- Goals -->
+      <div class="section" id="section-goals">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">목표 / OKR</div>
+          <button class="btn btn-primary" onclick="openGoalForm()">+ 목표 추가</button>
+        </div>
+        <div id="goal-form-wrap"></div>
+        <div id="goal-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDOgreIfT93lths6Ik3_xxr7vN3XHTVlPA",
+  authDomain: "my-life-os-ac878.firebaseapp.com",
+  projectId: "my-life-os-ac878",
+  storageBucket: "my-life-os-ac878.firebasestorage.app",
+  messagingSenderId: "211654261736",
+  appId: "1:211654261736:web:59b412a6191f13b5ac825d"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+let state = { assets: [], projects: [], todos: [], schedule: [], notes: [], goals: [] };
+let currentUser = null;
+let saveTimer = null;
+let viewingNoteId = null;
+let currentTodoFilter = '미완료';
+let currentProjectFilter = '전체';
+let expandedGoals = new Set();
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+const today = () => new Date().toISOString().split('T')[0];
+
+// ── Firebase ──────────────────────────────────────────────────────
+async function saveData() {
+  if (!currentUser) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try { await setDoc(doc(db, 'users', currentUser.uid, 'dashboard', 'data'), state); }
+    catch(e) { console.error('저장 오류:', e); }
+  }, 800);
+}
+
+async function loadData() {
+  document.getElementById('loading').style.display = 'block';
+  try {
+    const snap = await getDoc(doc(db, 'users', currentUser.uid, 'dashboard', 'data'));
+    if (snap.exists()) state = snap.data();
+  } catch(e) { console.error('불러오기 오류:', e); }
+  document.getElementById('loading').style.display = 'none';
+  renderAll();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────
+document.getElementById('login-btn').onclick = async () => {
+  try { await signInWithPopup(auth, provider); } catch(e) { alert('로그인 실패: ' + e.message); }
+};
+document.getElementById('logout-btn').onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('user-name').textContent = user.displayName || '';
+    document.getElementById('user-email').textContent = user.email;
+    loadData();
+  } else {
+    currentUser = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+// ── Navigation ────────────────────────────────────────────────────
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('section-' + btn.dataset.section).classList.add('active');
+  };
+});
+
+window.goTo = (section) => {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelector(`[data-section="${section}"]`).classList.add('active');
+  document.getElementById('section-' + section).classList.add('active');
+};
+
+function renderAll() {
+  renderOverview(); renderAssets(); renderProjects();
+  renderTodos(); renderSchedule(); renderNotes(); renderGoals();
+  document.getElementById('section-overview').classList.add('active');
+}
+
+// ── OVERVIEW ──────────────────────────────────────────────────────
+function renderOverview() {
+  const total = state.assets.reduce((s, a) => s + Number(a.amount || 0), 0);
+  const doneTodos = state.todos.filter(t => t.done).length;
+  const upcomingCount = state.schedule.filter(e => e.date >= today()).length;
+  const activeProj = state.projects.filter(p => p.status === '진행중').length;
+
+  document.getElementById('overview-stats').innerHTML = [
+    { label: '총 자산', value: '₩' + total.toLocaleString(), section: 'assets', color: '#4f9cf9' },
+    { label: '할일 완료', value: `${doneTodos} / ${state.todos.length}`, section: 'todos', color: '#4caf7d' },
+    { label: '진행중 프로젝트', value: activeProj + '개', section: 'projects', color: '#a78bfa' },
+    { label: '다가오는 일정', value: upcomingCount + '개', section: 'schedule', color: '#f0a742' },
+    { label: '메모', value: state.notes.length + '개', section: 'notes', color: '#e25c5c' },
+    { label: '목표', value: state.goals.length + '개', section: 'goals', color: '#888' },
+  ].map(s => `<div class="stat-card" onclick="goTo('${s.section}')"><div class="stat-label">${s.label}</div><div class="stat-value" style="color:${s.color}">${s.value}</div></div>`).join('');
+
+  const pendingTodos = state.todos.filter(t => !t.done).slice(0, 5);
+  document.getElementById('overview-todos').innerHTML = pendingTodos.length
+    ? pendingTodos.map(t => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${t.text}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${t.due}</span>`:''}</div>`).join('')
+    : '<div style="font-size:13px;color:var(--text2)">모두 완료! 🎉</div>';
+
+  const todaySched = state.schedule.filter(e => e.date === today());
+  document.getElementById('overview-schedule').innerHTML = todaySched.length
+    ? todaySched.map(e => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${e.time?`<span style="color:var(--text2);margin-right:6px">${e.time}</span>`:''}${e.title}</div>`).join('')
+    : '<div style="font-size:13px;color:var(--text2)">오늘 일정 없음</div>';
+
+  if (state.goals.length > 0) {
+    document.getElementById('overview-goals-card').style.display = 'block';
+    document.getElementById('overview-goals').innerHTML = state.goals.map(g =>
+      `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>${g.title}</span><span style="color:var(--text2)">${g.progress}%</span></div><div class="progress-bar"><div class="progress-fill" style="width:${g.progress}%;background:var(--success)"></div></div></div>`
+    ).join('');
+  } else {
+    document.getElementById('overview-goals-card').style.display = 'none';
+  }
+}
+
+// ── ASSETS ────────────────────────────────────────────────────────
+const ASSET_TYPES = ['은행/통장','현금','주식','코인','부동산','적금','기타'];
+
+function renderAssets() {
+  const total = state.assets.reduce((s, a) => s + Number(a.amount || 0), 0);
+  document.getElementById('asset-total').textContent = '₩' + total.toLocaleString();
+  const byType = ASSET_TYPES.map(t => ({ t, sum: state.assets.filter(a => a.type === t).reduce((s, a) => s + Number(a.amount||0), 0) })).filter(x => x.sum > 0);
+  document.getElementById('asset-breakdown').innerHTML = byType.length
+    ? byType.map(b => `<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">${b.t}</span><span>₩${b.sum.toLocaleString()}</span></div>`).join('')
+    : '<span style="color:var(--text2)">자산을 추가해보세요</span>';
+  document.getElementById('asset-list').innerHTML = state.assets.map(a =>
+    `<div class="list-item">
+      <div><span style="font-weight:500;font-size:14px">${a.name}</span><span style="font-size:12px;color:var(--text2);margin-left:8px">${a.type}</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:15px;font-weight:700">₩${Number(a.amount).toLocaleString()}</span>
+        <button class="btn btn-sm" onclick="editAsset('${a.id}')">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteAsset('${a.id}')">삭제</button>
+      </div>
+    </div>`
+  ).join('') || '<div class="empty">자산을 추가해보세요!</div>';
+}
+
+window.openAssetForm = (id) => {
+  const a = id ? state.assets.find(x => x.id === id) : {};
+  document.getElementById('asset-form-wrap').innerHTML = `
+    <div class="form-card">
+      <div class="form-row cols-2">
+        <input id="af-name" placeholder="이름 (예: 국민은행)" value="${a.name||''}">
+        <select id="af-type">${ASSET_TYPES.map(t=>`<option ${a.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      <input id="af-amount" type="number" placeholder="금액 (원)" value="${a.amount||''}" style="margin-bottom:0">
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveAsset('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('asset-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+
+window.editAsset = (id) => openAssetForm(id);
+window.saveAsset = (id) => {
+  const name = document.getElementById('af-name').value.trim();
+  const amount = document.getElementById('af-amount').value;
+  if (!name || !amount) return;
+  const a = { name, type: document.getElementById('af-type').value, amount };
+  if (id) state.assets = state.assets.map(x => x.id === id ? {...x,...a} : x);
+  else state.assets.push({ id: uid(), ...a });
+  document.getElementById('asset-form-wrap').innerHTML = '';
+  renderAssets(); renderOverview(); saveData();
+};
+window.deleteAsset = (id) => { state.assets = state.assets.filter(x => x.id !== id); renderAssets(); renderOverview(); saveData(); };
+
+// ── PROJECTS ──────────────────────────────────────────────────────
+const STATUSES = ['계획중','진행중','완료','보류'];
+const SBADGE = { '계획중':'badge-blue','진행중':'badge-yellow','완료':'badge-green','보류':'badge-gray' };
+
+function renderProjects() {
+  document.getElementById('project-filters').innerHTML = ['전체',...STATUSES].map(f =>
+    `<button class="filter-tab ${currentProjectFilter===f?'active':''}" onclick="setPF('${f}')">${f}</button>`
+  ).join('');
+  const filtered = currentProjectFilter === '전체' ? state.projects : state.projects.filter(p => p.status === currentProjectFilter);
+  document.getElementById('project-list').innerHTML = filtered.map(p =>
+    `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <span style="font-weight:600;font-size:15px">${p.name}</span>
+        <span class="badge ${SBADGE[p.status]}">${p.status}</span>
+      </div>
+      ${p.stack?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${p.stack}</div>`:''}
+      ${p.desc?`<div style="font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.55">${p.desc}</div>`:''}
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px"><span>진행률</span><span>${p.progress}%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="editProject('${p.id}')">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">삭제</button>
+      </div>
+    </div>`
+  ).join('') || '<div class="empty" style="grid-column:1/-1">프로젝트를 추가해보세요!</div>';
+}
+
+window.setPF = (f) => { currentProjectFilter = f; renderProjects(); };
+window.openProjectForm = (id) => {
+  const p = id ? state.projects.find(x => x.id === id) : {};
+  document.getElementById('project-form-wrap').innerHTML = `
+    <div class="form-card">
+      <input id="pf-name" placeholder="프로젝트 이름" value="${p.name||''}" style="margin-bottom:8px;font-size:15px">
+      <div class="form-row cols-2">
+        <select id="pf-status">${STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
+        <input id="pf-stack" placeholder="스택 (React, Node.js...)" value="${p.stack||''}">
+      </div>
+      <textarea id="pf-desc" placeholder="프로젝트 설명" style="height:70px;resize:none;margin-bottom:8px">${p.desc||''}</textarea>
+      <div style="margin-bottom:4px"><span class="form-label">진행률: <span id="pf-pv">${p.progress||0}</span>%</span></div>
+      <input type="range" id="pf-progress" min="0" max="100" value="${p.progress||0}" oninput="document.getElementById('pf-pv').textContent=this.value" style="margin-bottom:4px">
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveProject('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('project-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+window.editProject = (id) => openProjectForm(id);
+window.saveProject = (id) => {
+  const name = document.getElementById('pf-name').value.trim();
+  if (!name) return;
+  const p = { name, status: document.getElementById('pf-status').value, stack: document.getElementById('pf-stack').value, desc: document.getElementById('pf-desc').value, progress: Number(document.getElementById('pf-progress').value) };
+  if (id) state.projects = state.projects.map(x => x.id === id ? {...x,...p} : x);
+  else state.projects.push({ id: uid(), ...p });
+  document.getElementById('project-form-wrap').innerHTML = '';
+  renderProjects(); renderOverview(); saveData();
+};
+window.deleteProject = (id) => { state.projects = state.projects.filter(x => x.id !== id); renderProjects(); renderOverview(); saveData(); };
+
+// ── TODOS ─────────────────────────────────────────────────────────
+const PCOL = { '높음':'var(--danger)','중간':'var(--warning)','낮음':'var(--success)' };
+
+function renderTodos() {
+  document.getElementById('todo-count').textContent = `${state.todos.filter(t=>t.done).length} / ${state.todos.length} 완료`;
+  document.getElementById('todo-filters').innerHTML = ['미완료','완료','전체'].map(f =>
+    `<button class="filter-tab ${currentTodoFilter===f?'active':''}" onclick="setTF('${f}')">${f}</button>`).join('');
+  const filtered = currentTodoFilter==='전체' ? state.todos : currentTodoFilter==='미완료' ? state.todos.filter(t=>!t.done) : state.todos.filter(t=>t.done);
+  document.getElementById('todo-list').innerHTML = filtered.map(t =>
+    `<div class="todo-item ${t.done?'done':''}">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo('${t.id}')">
+      <div style="flex:1;font-size:14px;${t.done?'text-decoration:line-through;':''}">${t.text}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:8px">${t.due}</span>`:''}</div>
+      <span style="font-size:11px;font-weight:500;color:${PCOL[t.priority]}">${t.priority}</span>
+      <button class="btn btn-sm btn-danger" onclick="deleteTodo('${t.id}')">✕</button>
+    </div>`
+  ).join('') || `<div class="empty">${currentTodoFilter==='미완료'?'할일 없음! 🎉':'항목이 없습니다'}</div>`;
+}
+
+window.setTF = (f) => { currentTodoFilter = f; renderTodos(); };
+window.addTodo = () => {
+  const text = document.getElementById('todo-input').value.trim();
+  if (!text) return;
+  state.todos.push({ id: uid(), text, done: false, priority: document.getElementById('todo-priority').value, due: document.getElementById('todo-due').value });
+  document.getElementById('todo-input').value = '';
+  document.getElementById('todo-due').value = '';
+  renderTodos(); renderOverview(); saveData();
+};
+window.toggleTodo = (id) => { state.todos = state.todos.map(t => t.id===id?{...t,done:!t.done}:t); renderTodos(); renderOverview(); saveData(); };
+window.deleteTodo = (id) => { state.todos = state.todos.filter(t => t.id!==id); renderTodos(); renderOverview(); saveData(); };
+
+// ── SCHEDULE ──────────────────────────────────────────────────────
+const ETYPES = ['업무','미팅','개발','개인','기타'];
+const ECOLOR = { '업무':'#4f9cf9','미팅':'#4caf7d','개발':'#a78bfa','개인':'#f0a742','기타':'#888' };
+
+function renderSchedule() {
+  const sorted = [...state.schedule].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const upcoming = sorted.filter(e=>e.date>=today());
+  const past = sorted.filter(e=>e.date<today());
+  const eHTML = e => `
+    <div class="list-item">
+      <div class="event-accent" style="background:${ECOLOR[e.type]||'#888'}"></div>
+      <div style="flex:1;margin-left:8px">
+        <div style="font-size:14px;font-weight:500">${e.title}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${e.date}${e.time?' · '+e.time:''} · <span style="color:${ECOLOR[e.type]}">${e.type}</span></div>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-sm" onclick="editSchedule('${e.id}')">수정</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteSchedule('${e.id}')">삭제</button>
+      </div>
+    </div>`;
+  document.getElementById('schedule-upcoming-label').textContent = upcoming.length ? '다가오는 일정' : '';
+  document.getElementById('schedule-upcoming').innerHTML = upcoming.map(eHTML).join('') || '<div class="empty">일정을 추가해보세요!</div>';
+  if (past.length) {
+    document.getElementById('schedule-past-label').style.display = 'block';
+    document.getElementById('schedule-past').innerHTML = past.map(eHTML).join('');
+  } else { document.getElementById('schedule-past-label').style.display = 'none'; document.getElementById('schedule-past').innerHTML = ''; }
+}
+
+window.openScheduleForm = (id) => {
+  const e = id ? state.schedule.find(x=>x.id===id) : {};
+  document.getElementById('schedule-form-wrap').innerHTML = `
+    <div class="form-card">
+      <input id="sf-title" placeholder="일정 제목" value="${e.title||''}" style="margin-bottom:8px">
+      <div class="form-row cols-3">
+        <input type="date" id="sf-date" value="${e.date||today()}">
+        <input type="time" id="sf-time" value="${e.time||''}">
+        <select id="sf-type">${ETYPES.map(t=>`<option ${e.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveSchedule('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('schedule-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+window.editSchedule = (id) => openScheduleForm(id);
+window.saveSchedule = (id) => {
+  const title = document.getElementById('sf-title').value.trim();
+  if (!title) return;
+  const e = { title, date: document.getElementById('sf-date').value, time: document.getElementById('sf-time').value, type: document.getElementById('sf-type').value };
+  if (id) state.schedule = state.schedule.map(x=>x.id===id?{...x,...e}:x);
+  else state.schedule.push({ id: uid(), ...e });
+  document.getElementById('schedule-form-wrap').innerHTML = '';
+  renderSchedule(); renderOverview(); saveData();
+};
+window.deleteSchedule = (id) => { state.schedule = state.schedule.filter(x=>x.id!==id); renderSchedule(); renderOverview(); saveData(); };
+
+// ── NOTES ─────────────────────────────────────────────────────────
+window.renderNotes = () => {
+  const q = (document.getElementById('note-search').value||'').toLowerCase();
+  const filtered = q ? state.notes.filter(n=>n.title.toLowerCase().includes(q)||(n.content||'').toLowerCase().includes(q)) : state.notes;
+  document.getElementById('notes-grid').innerHTML = filtered.map(n =>
+    `<div class="note-card" onclick="viewNote('${n.id}')">
+      <div style="font-weight:500;font-size:14px;margin-bottom:6px">${n.title}</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical">${n.content||''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <span style="font-size:11px;color:var(--text3)">${n.date||''}</span>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteNote('${n.id}')">삭제</button>
+      </div>
+    </div>`
+  ).join('') || `<div class="empty">${q?'검색 결과 없음':'아이디어를 기록해보세요!'}</div>`;
+};
+
+window.openNoteForm = (id) => {
+  const n = id ? state.notes.find(x=>x.id===id) : {};
+  document.getElementById('note-form-wrap').innerHTML = `
+    <div class="form-card">
+      <input id="nf-title" placeholder="제목" value="${n.title||''}" style="margin-bottom:8px;font-size:16px">
+      <textarea id="nf-content" placeholder="내용을 입력하세요..." style="height:140px;resize:vertical;margin-bottom:0">${n.content||''}</textarea>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveNote('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('note-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+window.saveNote = (id) => {
+  const title = document.getElementById('nf-title').value.trim();
+  if (!title) return;
+  const n = { title, content: document.getElementById('nf-content').value, date: today() };
+  if (id) state.notes = state.notes.map(x=>x.id===id?{...x,...n}:x);
+  else state.notes.unshift({ id: uid(), ...n });
+  document.getElementById('note-form-wrap').innerHTML = '';
+  renderNotes(); renderOverview(); saveData();
+};
+window.viewNote = (id) => {
+  viewingNoteId = id;
+  const n = state.notes.find(x=>x.id===id);
+  document.getElementById('notes-list-view').style.display = 'none';
+  document.getElementById('notes-detail-view').style.display = 'block';
+  document.getElementById('note-detail-title').textContent = n.title;
+  document.getElementById('note-detail-date').textContent = n.date;
+  document.getElementById('note-detail-content').textContent = n.content;
+};
+window.closeNoteDetail = () => {
+  viewingNoteId = null;
+  document.getElementById('notes-list-view').style.display = '';
+  document.getElementById('notes-detail-view').style.display = 'none';
+};
+window.editCurrentNote = () => { const id = viewingNoteId; closeNoteDetail(); openNoteForm(id); };
+window.deleteNote = (id) => { state.notes = state.notes.filter(n=>n.id!==id); renderNotes(); renderOverview(); saveData(); };
+
+// ── GOALS ─────────────────────────────────────────────────────────
+function renderGoals() {
+  document.getElementById('goal-list').innerHTML = state.goals.map(g =>
+    `<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div><span style="font-weight:600;font-size:15px">${g.title}</span>${g.deadline?`<span style="font-size:12px;color:var(--text2);margin-left:8px">~ ${g.deadline}</span>`:''}</div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm btn-ghost" onclick="toggleGE('${g.id}')">${expandedGoals.has(g.id)?'접기':'KR'}</button>
+          <button class="btn btn-sm" onclick="editGoal('${g.id}')">수정</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteGoal('${g.id}')">삭제</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px"><span>전체 진행률</span><span style="font-weight:500">${g.progress}%</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${g.progress}%;background:var(--success)"></div></div>
+      ${expandedGoals.has(g.id) && (g.keyResults||[]).length>0?`
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          ${(g.keyResults||[]).map((kr,i)=>`
+            <div class="kr-item">
+              <div style="font-size:13px;margin-bottom:5px">${kr.text}</div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <input type="range" min="0" max="100" value="${kr.progress||0}" style="flex:1;accent-color:var(--success)" oninput="updateKR('${g.id}',${i},this.value)">
+                <span style="font-size:12px;color:var(--text2);min-width:32px">${kr.progress||0}%</span>
+              </div>
+            </div>`).join('')}
+        </div>`:''}
+    </div>`
+  ).join('') || '<div class="empty">목표를 설정해보세요!</div>';
+}
+
+window.toggleGE = (id) => { if(expandedGoals.has(id))expandedGoals.delete(id);else expandedGoals.add(id); renderGoals(); };
+window.updateKR = (goalId, idx, val) => {
+  state.goals = state.goals.map(g => {
+    if (g.id!==goalId) return g;
+    const krs = (g.keyResults||[]).map((kr,i)=>i===idx?{...kr,progress:Number(val)}:kr);
+    return {...g, keyResults:krs, progress: krs.length?Math.round(krs.reduce((s,k)=>s+k.progress,0)/krs.length):0};
+  });
+  renderGoals(); renderOverview(); saveData();
+};
+window.openGoalForm = (id) => {
+  const g = id ? state.goals.find(x=>x.id===id) : {};
+  document.getElementById('goal-form-wrap').innerHTML = `
+    <div class="form-card">
+      <input id="gf-title" placeholder="목표 (Objective)" value="${g.title||''}" style="margin-bottom:8px;font-size:15px">
+      <div style="margin-bottom:8px"><span class="form-label">마감일</span><input type="date" id="gf-deadline" value="${g.deadline||''}"></div>
+      <span class="form-label">핵심 결과물 Key Results (한 줄에 하나)</span>
+      <textarea id="gf-krs" placeholder="앱 출시&#10;MAU 1000명 달성&#10;수익화 달성" style="height:90px;resize:none;margin-bottom:0">${(g.keyResults||[]).map(k=>k.text).join('\n')}</textarea>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveGoal('${id||''}')">저장</button>
+        <button class="btn" onclick="document.getElementById('goal-form-wrap').innerHTML=''">취소</button>
+      </div>
+    </div>`;
+};
+window.editGoal = (id) => openGoalForm(id);
+window.saveGoal = (id) => {
+  const title = document.getElementById('gf-title').value.trim();
+  if (!title) return;
+  const existKRs = id ? (state.goals.find(x=>x.id===id)?.keyResults||[]) : [];
+  const keyResults = document.getElementById('gf-krs').value.split('\n').map(s=>s.trim()).filter(Boolean).map((text,i)=>({text,progress:existKRs[i]?.progress||0}));
+  const g = { title, deadline: document.getElementById('gf-deadline').value, keyResults, progress: keyResults.length?Math.round(keyResults.reduce((s,k)=>s+k.progress,0)/keyResults.length):0 };
+  if (id) state.goals = state.goals.map(x=>x.id===id?{...x,...g}:x);
+  else state.goals.push({ id: uid(), ...g });
+  document.getElementById('goal-form-wrap').innerHTML = '';
+  renderGoals(); renderOverview(); saveData();
+};
+window.deleteGoal = (id) => { state.goals = state.goals.filter(x=>x.id!==id); renderGoals(); renderOverview(); saveData(); };
+</script>
+</body>
+</html>
