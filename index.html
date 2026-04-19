@@ -805,8 +805,8 @@ function renderIssueBadge(p) {
     return '';
   }
   if (cached.error) return `<span class="badge badge-gray" style="font-size:10px;cursor:help" title="${cached.error}">⚠ GitHub</span>`;
-  if (cached.count === 0) return '<span class="badge badge-green" style="font-size:10px">✓ 0 이슈</span>';
-  return `<span class="badge badge-blue" style="font-size:10px" title="열린 이슈 ${cached.count}개">📂 ${cached.count} 이슈</span>`;
+  if (cached.count === 0) return `<span class="badge badge-green" style="font-size:10px;cursor:pointer" onclick="openProjectIssues('${p.id}')" title="이슈 목록">✓ 0 이슈</span>`;
+  return `<span class="badge badge-blue" style="font-size:10px;cursor:pointer" onclick="openProjectIssues('${p.id}')" title="이슈 목록 보기">📂 ${cached.count} 이슈</span>`;
 }
 
 function renderProjects() {
@@ -1225,6 +1225,93 @@ async function fetchAllProjectIssues() {
     githubFetchInFlight = false;
   }
 }
+
+const formatRelative = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins < 1 ? '방금' : mins + '분 전'}`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}시간 전`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}일 전`;
+  if (days < 30) return `${Math.floor(days/7)}주 전`;
+  return `${Math.floor(days/30)}개월 전`;
+};
+
+function renderIssueItem(issue) {
+  const labels = (issue.labels || []).map(l => {
+    const c = (l.color || '888').replace(/^#/, '');
+    return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;background:#${c}30;color:#${c};border:1px solid #${c}50">${l.name}</span>`;
+  }).join(' ');
+  const assigneeImg = issue.assignee ? `<img src="${issue.assignee.avatar_url}&s=20" style="width:16px;height:16px;border-radius:50%;vertical-align:middle">` : '';
+  const bodyPreview = issue.body ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${issue.body.replace(/[#*`_~]/g,'').slice(0,200)}</div>` : '';
+  return `<a href="${issue.html_url}" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--bg3);border-radius:8px;margin-bottom:6px;text-decoration:none;color:var(--text);transition:border-color 0.15s;border:1px solid transparent" onmouseover="this.style.borderColor='var(--text3)'" onmouseout="this.style.borderColor='transparent'">
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <span style="flex-shrink:0;color:var(--success);font-size:14px;line-height:1.2" title="open">◉</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;line-height:1.4">${issue.title} <span style="color:var(--text3);font-weight:normal;font-size:11px">#${issue.number}</span></div>
+        ${bodyPreview}
+        ${labels ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${labels}</div>` : ''}
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+          <span>${formatRelative(issue.updated_at)}</span>
+          ${assigneeImg ? `<span>${assigneeImg} ${issue.assignee.login}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  </a>`;
+}
+
+function renderProjectIssuesPanel(p, parsed, cached) {
+  const issues = cached?.issues || [];
+  const error = cached?.error;
+  const fetched = cached?.fetchedAt ? ` · ${formatRelative(new Date(cached.fetchedAt).toISOString())}` : '';
+  return `
+    <div class="side-panel-header">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${parsed.owner}/${parsed.repo}${fetched}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="refreshProjectIssues('${p.id}')" title="새로고침">🔄</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeTaskDetail()">✕</button>
+      </div>
+    </div>
+    <div class="side-panel-body">
+      ${error ? `<div style="color:var(--danger);font-size:13px;padding:12px;background:rgba(226,92,92,0.08);border-radius:8px">⚠ ${error}</div>` : ''}
+      ${!error && issues.length === 0 ? `<div class="empty" style="padding:40px 0">🎉 열린 이슈 없음</div>` : ''}
+      ${issues.map(renderIssueItem).join('')}
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px">
+        <a href="https://github.com/${parsed.owner}/${parsed.repo}/issues/new" target="_blank" rel="noopener" class="btn btn-sm" style="text-decoration:none">+ 새 이슈</a>
+        <a href="https://github.com/${parsed.owner}/${parsed.repo}/issues" target="_blank" rel="noopener" class="btn btn-sm btn-ghost" style="text-decoration:none">GitHub에서 열기 ↗</a>
+      </div>
+    </div>
+  `;
+}
+
+window.openProjectIssues = (pid) => {
+  const p = state.projects.find(x => x.id === pid);
+  if (!p) return;
+  const parsed = parseRepoKey(p.github);
+  if (!parsed) return;
+  currentTaskDetailId = null;
+  const cached = githubIssueCache[parsed.key];
+  document.getElementById('side-panel').innerHTML = renderProjectIssuesPanel(p, parsed, cached);
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('side-panel-overlay').classList.add('open');
+};
+
+window.refreshProjectIssues = async (pid) => {
+  const p = state.projects.find(x => x.id === pid);
+  if (!p) return;
+  const parsed = parseRepoKey(p.github);
+  if (!parsed) return;
+  document.getElementById('side-panel').innerHTML = renderProjectIssuesPanel(p, parsed, { fetchedAt: Date.now() }) ;
+  await fetchIssuesForProject(p);
+  openProjectIssues(pid);
+  renderProjects();
+};
 
 // ── SETTINGS ──────────────────────────────────────────────────────
 window.openSettings = () => {
