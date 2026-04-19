@@ -474,15 +474,45 @@ function renderOverview() {
   }
 }
 
+// ── CHART HELPER ──────────────────────────────────────────────────
+function donutChart(segments, opts = {}) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (total === 0) return '<div style="color:var(--text2);font-size:13px;padding:20px 0">데이터 없음</div>';
+  const size = opts.size || 140;
+  const fmt = opts.format || (v => v.toLocaleString());
+  const cx = size/2, cy = size/2, r = (size - 24)/2;
+  const C = 2 * Math.PI * r;
+  let off = 0;
+  const arcs = segments.filter(s => s.value > 0).map(s => {
+    const len = (s.value / total) * C;
+    const arc = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="22" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    off += len;
+    return arc;
+  }).join('');
+  const legend = segments.filter(s => s.value > 0).map(s => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0">
+      <span style="display:flex;align-items:center;gap:6px;color:var(--text);min-width:0"><span style="width:8px;height:8px;background:${s.color};border-radius:2px;flex-shrink:0"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.label}</span></span>
+      <span style="color:var(--text2);font-size:11px;flex-shrink:0">${fmt(s.value)} (${Math.round(s.value/total*100)}%)</span>
+    </div>`).join('');
+  return `<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--bg3)" stroke-width="22"/>
+      ${arcs}
+    </svg>
+    <div style="flex:1;font-size:12px;line-height:1.7;min-width:140px">${legend}</div>
+  </div>`;
+}
+
 // ── ASSETS ────────────────────────────────────────────────────────
 const ASSET_TYPES = ['은행/통장','현금','주식','코인','부동산','적금','기타'];
+const ASSET_COLORS = { '은행/통장':'#4f9cf9','현금':'#4caf7d','주식':'#a78bfa','코인':'#f0a742','부동산':'#e25c5c','적금':'#5ec5d4','기타':'#888' };
 
 function renderAssets() {
   const total = state.assets.reduce((s, a) => s + Number(a.amount || 0), 0);
   document.getElementById('asset-total').textContent = '₩' + total.toLocaleString();
   const byType = ASSET_TYPES.map(t => ({ t, sum: state.assets.filter(a => a.type === t).reduce((s, a) => s + Number(a.amount||0), 0) })).filter(x => x.sum > 0);
   document.getElementById('asset-breakdown').innerHTML = byType.length
-    ? byType.map(b => `<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">${b.t}</span><span>₩${b.sum.toLocaleString()}</span></div>`).join('')
+    ? donutChart(byType.map(b => ({ label: b.t, value: b.sum, color: ASSET_COLORS[b.t]||'#888' })), { format: v => '₩'+v.toLocaleString() })
     : '<span style="color:var(--text2)">자산을 추가해보세요</span>';
   document.getElementById('asset-list').innerHTML = state.assets.map(a =>
     `<div class="list-item">
@@ -527,6 +557,7 @@ window.deleteAsset = (id) => { state.assets = state.assets.filter(x => x.id !== 
 
 // ── FIXED EXPENSES ────────────────────────────────────────────────
 const FE_CATEGORIES = ['주거','구독','통신','보험','교통','교육','할부','대출','기타'];
+const FE_COLORS = { '주거':'#4f9cf9','구독':'#a78bfa','통신':'#5ec5d4','보험':'#4caf7d','교통':'#f0a742','교육':'#e9d56b','할부':'#c084fc','대출':'#e25c5c','기타':'#888' };
 const FE_TYPES = ['일반','할부','대출'];
 const FE_FREQS = ['매월','매년'];
 let feFilter = 'active';
@@ -618,7 +649,7 @@ function renderFixedExpenses() {
   const breakdownEl = document.getElementById('fe-breakdown');
   if (byCat.length) {
     breakdownEl.style.display = '';
-    breakdownEl.innerHTML = byCat.map(x => `<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">${x.c}</span><span>₩${Math.round(x.sum).toLocaleString()}</span></div>`).join('');
+    breakdownEl.innerHTML = donutChart(byCat.map(x => ({ label: x.c, value: x.sum, color: FE_COLORS[x.c]||'#888' })), { format: v => '₩'+Math.round(v).toLocaleString() });
   } else {
     breakdownEl.style.display = 'none';
   }
@@ -633,11 +664,21 @@ function renderFixedExpenses() {
     const inactive = e.active === false || isInstallmentDone(e);
     const typeBadge = e.type && e.type !== '일반' ? `<span class="badge ${e.type==='할부'?'badge-purple':'badge-yellow'}" style="font-size:10px">${e.type}</span>` : '';
     let extraInfo = '';
+    let nextHint = '';
     if (e.type === '할부') {
       const total = Number(e.totalInstallments||0);
       const cur = currentInstallmentOf(e);
       const remain = Math.max(0, total - cur);
       extraInfo = ` · ${cur}/${total}회 · 남은 ₩${(remain * Number(e.amount||0)).toLocaleString()}`;
+      if (cur < total && e.payDay && e.frequency === '매월') {
+        const pd = Number(e.payDay);
+        const now = new Date();
+        const tdy = now.getDate();
+        const dim = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+        const dn = tdy < pd ? (pd - tdy) : ((dim - tdy) + pd);
+        const dt = dn === 0 ? '오늘' : `D-${dn}`;
+        nextHint = `<div style="font-size:11px;color:var(--text3);margin-top:2px">↳ ${dt} 결제일에 ${cur+1}/${total}회로 갱신 예정</div>`;
+      }
     } else if (e.type === '대출') {
       extraInfo = ` · 잔여 ₩${Number(e.remainingPrincipal||0).toLocaleString()}`;
     }
@@ -650,6 +691,7 @@ function renderFixedExpenses() {
           ${dayLabel?`<span style="font-size:11px;color:${days<=3?'var(--danger)':days<=7?'var(--warning)':'var(--text3)'}">${dayLabel}</span>`:''}
         </div>
         <div style="font-size:12px;color:var(--text2);margin-top:3px">₩${Number(e.amount||0).toLocaleString()} · ${formatPayDate(e)}${extraInfo}</div>
+        ${nextHint}
         ${e.memo?`<div style="font-size:12px;color:var(--text3);margin-top:3px">${e.memo}</div>`:''}
       </div>
       <div class="item-actions">
@@ -1210,10 +1252,7 @@ function initGcalTokenClient() {
     callback: (resp) => {
       if (resp.error) {
         console.error('GCal token error:', resp);
-        if (resp.error === 'interaction_required' || resp.error === 'consent_required' || resp.error === 'login_required') {
-          localStorage.removeItem('gcal-connected');
-        }
-        updateGcalStatus('연결 실패');
+        // Keep the connected flag so user sees "재연결" button instead of fresh "연결"
         updateGcalUI();
         return;
       }
@@ -1243,12 +1282,21 @@ function updateGcalUI() {
   const disconnectBtn = document.getElementById('gcal-disconnect-btn');
   if (!connectBtn) return;
   const isConnected = !!gcalAccessToken;
+  const wasConnected = localStorage.getItem('gcal-connected') === '1';
   connectBtn.style.display = isConnected ? 'none' : '';
   syncBtn.style.display = isConnected ? '' : 'none';
   disconnectBtn.style.display = isConnected ? '' : 'none';
   if (isConnected) {
+    connectBtn.textContent = '📅 캘린더 연결';
+    connectBtn.title = '';
     updateGcalStatus(gcalLastSync ? `📅 ${gcalEvents.length}개 · ${formatTs(gcalLastSync.getTime())}` : `📅 ${gcalEvents.length}개`);
+  } else if (wasConnected) {
+    connectBtn.textContent = '🔁 재연결';
+    connectBtn.title = '세션 만료 - 클릭하여 다시 연결';
+    updateGcalStatus('재연결 필요');
   } else {
+    connectBtn.textContent = '📅 캘린더 연결';
+    connectBtn.title = '';
     updateGcalStatus('');
   }
 }
