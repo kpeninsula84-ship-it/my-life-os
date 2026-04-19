@@ -106,6 +106,13 @@
     .status-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; user-select: none; padding: 4px 0; }
     .status-section-header:hover { opacity: 0.85; }
 
+    /* Kanban */
+    .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+    .kanban-column { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 280px; }
+    .kanban-col-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .kanban-card { background: var(--bg3); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; border: 1px solid transparent; transition: border-color 0.15s; }
+    .kanban-card:hover { border-color: var(--text3); }
+
     /* Modal */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 150; padding: 20px; }
     .modal-overlay.open { display: flex; }
@@ -193,6 +200,7 @@
         <button class="nav-btn" data-section="todos"><span class="nav-icon">✓</span><span>업무 / 할일</span></button>
         <button class="nav-btn" data-section="notes"><span class="nav-icon">≡</span><span>메모 / 아이디어</span></button>
         <button class="nav-btn" data-section="goals"><span class="nav-icon">◎</span><span>목표 / OKR</span></button>
+        <button class="nav-btn" data-section="issueboard"><span class="nav-icon">▤</span><span>이슈 보드</span></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="user-name" id="user-name"></div>
@@ -307,6 +315,19 @@
         </div>
         <div id="goal-form-wrap"></div>
         <div id="goal-list"></div>
+      </div>
+
+      <!-- Issue Board -->
+      <div class="section" id="section-issueboard">
+        <div class="section-header">
+          <div class="section-title" style="margin:0">이슈 보드</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="ib-project-select" onchange="onProjectV2Select(this.value)" style="min-width:180px;width:auto"></select>
+            <button class="btn btn-sm" onclick="refreshIssueBoard()" title="새로고침">🔄</button>
+          </div>
+        </div>
+        <div id="ib-status" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>
+        <div id="ib-kanban" class="kanban"></div>
       </div>
     </div>
   </div>
@@ -423,6 +444,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('section-' + btn.dataset.section).classList.add('active');
+    if (btn.dataset.section === 'issueboard') loadIssueBoard();
   };
 });
 
@@ -431,6 +453,7 @@ window.goTo = (section) => {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelector(`[data-section="${section}"]`).classList.add('active');
   document.getElementById('section-' + section).classList.add('active');
+  if (section === 'issueboard') loadIssueBoard();
 };
 
 function renderAll() {
@@ -1301,6 +1324,201 @@ window.openProjectIssues = (pid) => {
   document.getElementById('side-panel').classList.add('open');
   document.getElementById('side-panel-overlay').classList.add('open');
 };
+
+// Issue Board (Projects v2)
+let projectsV2List = [];
+let selectedProjectV2Id = localStorage.getItem('selectedProjectV2Id') || '';
+let projectV2Items = [];
+let issueBoardLoading = false;
+
+async function ghGraphQL(query, variables = {}) {
+  const token = state.settings?.githubToken;
+  if (!token) throw new Error('GitHub 토큰이 설정되지 않았습니다');
+  const resp = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables })
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.errors) throw new Error(data.errors[0].message);
+  return data.data;
+}
+
+async function fetchUserProjectsV2() {
+  const data = await ghGraphQL(`query { viewer { projectsV2(first: 30, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { id title number url } } } }`);
+  projectsV2List = data.viewer?.projectsV2?.nodes || [];
+}
+
+async function fetchProjectV2Items(projectId) {
+  const data = await ghGraphQL(`
+    query($id: ID!) {
+      node(id: $id) {
+        ... on ProjectV2 {
+          items(first: 100) {
+            nodes {
+              id
+              content {
+                __typename
+                ... on Issue { number title url state repository { nameWithOwner } labels(first:5) { nodes { name color } } assignees(first:3) { nodes { login avatarUrl } } }
+                ... on PullRequest { number title url state repository { nameWithOwner } }
+                ... on DraftIssue { title body }
+              }
+              fieldValues(first: 20) {
+                nodes {
+                  __typename
+                  ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+                  ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+                  ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `, { id: projectId });
+  projectV2Items = data.node?.items?.nodes || [];
+}
+
+function getProjectFieldValue(item, fieldName) {
+  const nodes = item.fieldValues?.nodes || [];
+  for (const n of nodes) {
+    if (n.field?.name === fieldName) return n.name ?? n.text ?? n.number ?? null;
+  }
+  return null;
+}
+
+function renderKanbanCard(item) {
+  const c = item.content;
+  if (!c) return '';
+  const priority = getProjectFieldValue(item, 'Priority');
+  const size = getProjectFieldValue(item, 'Size') || getProjectFieldValue(item, 'Estimate');
+  const isPR = c.__typename === 'PullRequest';
+  const isDraft = c.__typename === 'DraftIssue';
+  const typeIcon = isPR ? '🔀' : isDraft ? '📝' : '◉';
+  const typeColor = isPR ? 'var(--accent)' : isDraft ? 'var(--text3)' : 'var(--success)';
+  const labels = (c.labels?.nodes || []).map(l => {
+    const col = (l.color || '888').replace(/^#/, '');
+    return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;background:#${col}30;color:#${col};border:1px solid #${col}50">${l.name}</span>`;
+  }).join(' ');
+  const assignees = (c.assignees?.nodes || []).slice(0,3).map(a => `<img src="${a.avatarUrl}&s=16" style="width:14px;height:14px;border-radius:50%" title="${a.login}">`).join('');
+  const repo = c.repository?.nameWithOwner || (isDraft ? 'Draft' : '');
+  const title = c.title || '(제목 없음)';
+  const numberStr = c.number ? ` <span style="color:var(--text3);font-size:11px">#${c.number}</span>` : '';
+  const cardInner = `<div class="kanban-card">
+      ${repo?`<div style="font-size:11px;color:var(--text3);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${repo}</div>`:''}
+      <div style="font-size:13px;line-height:1.4;margin-bottom:4px"><span style="color:${typeColor}">${typeIcon}</span> ${title}${numberStr}</div>
+      ${labels ? `<div style="margin-bottom:4px;display:flex;flex-wrap:wrap;gap:3px">${labels}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text2);gap:6px">
+        <span style="display:flex;gap:6px">
+          ${priority ? `<span>⚑ ${priority}</span>` : ''}
+          ${size ? `<span>◉ ${size}</span>` : ''}
+        </span>
+        ${assignees ? `<span style="display:flex;gap:2px">${assignees}</span>` : ''}
+      </div>
+    </div>`;
+  if (c.url) return `<a href="${c.url}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;display:block">${cardInner}</a>`;
+  return cardInner;
+}
+
+function renderIssueBoard() {
+  const statusEl = document.getElementById('ib-status');
+  const select = document.getElementById('ib-project-select');
+  const kanban = document.getElementById('ib-kanban');
+  if (!statusEl) return;
+
+  if (!state.settings?.githubToken) {
+    statusEl.innerHTML = '<span style="color:var(--warning)">⚙️ 설정에서 GitHub 토큰 먼저 등록하세요</span>';
+    select.innerHTML = '';
+    kanban.innerHTML = '';
+    return;
+  }
+
+  if (projectsV2List.length === 0) {
+    select.innerHTML = '<option>프로젝트 없음</option>';
+    if (!issueBoardLoading) kanban.innerHTML = '<div class="empty">GitHub Projects v2가 없습니다.<br>github.com/users/{본인}/projects 에서 먼저 만드세요.</div>';
+    return;
+  }
+
+  select.innerHTML = projectsV2List.map(p => `<option value="${p.id}" ${selectedProjectV2Id === p.id ? 'selected' : ''}>${p.title}</option>`).join('');
+
+  const issueItems = projectV2Items.filter(it => it.content);
+  const byStatus = {};
+  for (const item of issueItems) {
+    const status = getProjectFieldValue(item, 'Status') || 'No Status';
+    (byStatus[status] = byStatus[status] || []).push(item);
+  }
+
+  const statusOrder = ['Backlog', 'Todo', 'In Progress', 'In review', 'Review', 'Done', 'No Status'];
+  const statusKeys = Object.keys(byStatus).sort((a, b) => {
+    const ia = statusOrder.indexOf(a), ib = statusOrder.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const statusColors = {
+    'Backlog':'badge-gray','Todo':'badge-blue','In Progress':'badge-yellow',
+    'In review':'badge-purple','Review':'badge-purple','Done':'badge-green','No Status':'badge-gray'
+  };
+
+  kanban.innerHTML = statusKeys.length ? statusKeys.map(s => {
+    const items = byStatus[s];
+    return `<div class="kanban-column">
+      <div class="kanban-col-header">
+        <span class="badge ${statusColors[s] || 'badge-gray'}" style="font-size:11px">${s}</span>
+        <span style="font-size:12px;color:var(--text2)">${items.length}</span>
+      </div>
+      ${items.map(renderKanbanCard).join('')}
+    </div>`;
+  }).join('') : '<div class="empty">이 프로젝트에 항목이 없습니다</div>';
+
+  statusEl.innerHTML = `<span>${issueItems.length}개 항목 · ${statusKeys.length}개 상태</span>`;
+}
+
+window.onProjectV2Select = async (id) => {
+  selectedProjectV2Id = id;
+  localStorage.setItem('selectedProjectV2Id', id);
+  const statusEl = document.getElementById('ib-status');
+  statusEl.innerHTML = '<span style="color:var(--text2)">로딩 중...</span>';
+  issueBoardLoading = true;
+  try {
+    await fetchProjectV2Items(id);
+    issueBoardLoading = false;
+    renderIssueBoard();
+  } catch (e) {
+    issueBoardLoading = false;
+    statusEl.innerHTML = `<span style="color:var(--danger)">오류: ${e.message}</span>`;
+  }
+};
+
+window.refreshIssueBoard = async () => {
+  if (!selectedProjectV2Id) { await loadIssueBoard(); return; }
+  await onProjectV2Select(selectedProjectV2Id);
+};
+
+async function loadIssueBoard() {
+  if (!state.settings?.githubToken) { renderIssueBoard(); return; }
+  if (issueBoardLoading) return;
+  const statusEl = document.getElementById('ib-status');
+  statusEl.innerHTML = '<span style="color:var(--text2)">프로젝트 로딩 중...</span>';
+  issueBoardLoading = true;
+  try {
+    if (projectsV2List.length === 0) await fetchUserProjectsV2();
+    if (!selectedProjectV2Id || !projectsV2List.find(p => p.id === selectedProjectV2Id)) {
+      selectedProjectV2Id = projectsV2List[0]?.id || '';
+      if (selectedProjectV2Id) localStorage.setItem('selectedProjectV2Id', selectedProjectV2Id);
+    }
+    if (selectedProjectV2Id) await fetchProjectV2Items(selectedProjectV2Id);
+    issueBoardLoading = false;
+    renderIssueBoard();
+  } catch (e) {
+    issueBoardLoading = false;
+    statusEl.innerHTML = `<span style="color:var(--danger)">오류: ${e.message}</span>`;
+  }
+}
 
 window.refreshProjectIssues = async (pid) => {
   const p = state.projects.find(x => x.id === pid);
