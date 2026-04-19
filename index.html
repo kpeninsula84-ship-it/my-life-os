@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Life OS</title>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -107,6 +106,14 @@
     .status-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; user-select: none; padding: 4px 0; }
     .status-section-header:hover { opacity: 0.85; }
 
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 150; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+    .modal-section { margin-bottom: 20px; }
+    .hint { font-size: 11px; color: var(--text3); margin-top: 6px; line-height: 1.5; }
+
     /* Side panel */
     .side-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 99; }
     .side-panel-overlay.open { opacity: 1; pointer-events: auto; }
@@ -184,14 +191,16 @@
         <button class="nav-btn" data-section="assets"><span class="nav-icon">₩</span><span>자산 / 재정</span></button>
         <button class="nav-btn" data-section="projects"><span class="nav-icon">◈</span><span>개발 프로젝트</span></button>
         <button class="nav-btn" data-section="todos"><span class="nav-icon">✓</span><span>업무 / 할일</span></button>
-        <button class="nav-btn" data-section="schedule"><span class="nav-icon">◷</span><span>일정 / 스케줄</span></button>
         <button class="nav-btn" data-section="notes"><span class="nav-icon">≡</span><span>메모 / 아이디어</span></button>
         <button class="nav-btn" data-section="goals"><span class="nav-icon">◎</span><span>목표 / OKR</span></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="user-name" id="user-name"></div>
         <div class="user-email" id="user-email"></div>
-        <button class="btn btn-sm btn-ghost" id="logout-btn" style="width:100%">로그아웃</button>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm btn-ghost" onclick="openSettings()" style="flex:1" title="설정">⚙️</button>
+          <button class="btn btn-sm btn-ghost" id="logout-btn" style="flex:1">로그아웃</button>
+        </div>
       </div>
     </div>
 
@@ -202,15 +211,9 @@
       <div class="section" id="section-overview">
         <div class="section-title">대시보드</div>
         <div class="stat-grid" id="overview-stats"></div>
-        <div class="two-col">
-          <div class="card">
-            <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">미완료 할일</div>
-            <div id="overview-todos"></div>
-          </div>
-          <div class="card">
-            <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">오늘 일정</div>
-            <div id="overview-schedule"></div>
-          </div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">미완료 할일</div>
+          <div id="overview-todos"></div>
         </div>
         <div class="card" id="overview-goals-card" style="display:none">
           <div style="font-size:12px;color:var(--text2);margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em">목표 진행률</div>
@@ -273,24 +276,6 @@
         <div id="todo-list"></div>
       </div>
 
-      <!-- Schedule -->
-      <div class="section" id="section-schedule">
-        <div class="section-header">
-          <div class="section-title" style="margin:0">일정 / 스케줄</div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <span id="gcal-status" style="font-size:12px;color:var(--text2)"></span>
-            <button id="gcal-sync-btn" class="btn btn-sm" onclick="fetchGcalEvents()" style="display:none" title="Google Calendar 동기화">🔄</button>
-            <button id="gcal-disconnect-btn" class="btn btn-sm btn-ghost" onclick="disconnectGcal()" style="display:none" title="캘린더 연결 해제">⊗</button>
-            <button id="gcal-connect-btn" class="btn btn-sm" onclick="connectGcal()">📅 캘린더 연결</button>
-            <button class="btn btn-primary" onclick="openScheduleForm()">+ 추가</button>
-          </div>
-        </div>
-        <div id="schedule-form-wrap"></div>
-        <div id="schedule-upcoming-label" style="font-size:12px;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em"></div>
-        <div id="schedule-upcoming"></div>
-        <div id="schedule-past-label" style="font-size:12px;color:var(--text2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.04em;display:none">지난 일정</div>
-        <div id="schedule-past" style="opacity:0.5"></div>
-      </div>
 
       <!-- Notes -->
       <div class="section" id="section-notes">
@@ -329,6 +314,30 @@
   <!-- Task detail side panel -->
   <div id="side-panel-overlay" class="side-panel-overlay" onclick="closeTaskDetail()"></div>
   <div id="side-panel" class="side-panel"></div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal-overlay" onclick="if(event.target===this)closeSettings()">
+    <div class="modal-card">
+      <div class="modal-title">
+        <span>⚙️ 설정</span>
+        <button class="btn btn-ghost btn-sm" onclick="closeSettings()">✕</button>
+      </div>
+      <div class="modal-section">
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">GitHub 연동</div>
+        <label class="form-label">Personal Access Token</label>
+        <input type="password" id="settings-gh-token" placeholder="ghp_..." autocomplete="off">
+        <div class="hint">
+          repo + read:project 권한 필요. <a href="https://github.com/settings/tokens/new?scopes=repo,read:project&description=My%20Life%20OS" target="_blank" style="color:var(--accent)">토큰 생성 →</a><br>
+          Firestore에 저장되어 다른 기기에서도 자동 사용됩니다.
+        </div>
+        <div id="settings-gh-status" style="font-size:12px;margin-top:10px"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
+        <button class="btn" onclick="closeSettings()">닫기</button>
+        <button class="btn btn-primary" onclick="saveSettings()">저장 + 테스트</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -350,7 +359,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-let state = { assets: [], projects: [], todos: [], schedule: [], notes: [], goals: [], fixedExpenses: [] };
+let state = { assets: [], projects: [], todos: [], notes: [], goals: [], fixedExpenses: [], settings: {} };
 let currentUser = null;
 let saveTimer = null;
 let viewingNoteId = null;
@@ -359,12 +368,6 @@ let expandedGoals = new Set();
 let currentTaskDetailId = null;
 let collapsedTodoSections = new Set();
 
-const GCAL_CLIENT_ID = '211654261736-18okq9a3vnih2efnfj2makoutthqm15j.apps.googleusercontent.com';
-const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
-let gcalTokenClient = null;
-let gcalAccessToken = null;
-let gcalEvents = [];
-let gcalLastSync = null;
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const today = () => new Date().toISOString().split('T')[0];
@@ -386,8 +389,10 @@ async function loadData() {
     if (snap.exists()) state = snap.data();
   } catch(e) { console.error('불러오기 오류:', e); }
   state.fixedExpenses = state.fixedExpenses || [];
+  state.settings = state.settings || {};
   document.getElementById('loading').style.display = 'none';
   renderAll();
+  fetchAllProjectIssues();
 }
 
 // ── Auth ──────────────────────────────────────────────────────────
@@ -404,13 +409,10 @@ onAuthStateChanged(auth, user => {
     document.getElementById('user-name').textContent = user.displayName || '';
     document.getElementById('user-email').textContent = user.email;
     loadData();
-    initGcalTokenClient();
   } else {
     currentUser = null;
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
-    gcalAccessToken = null;
-    gcalEvents = [];
   }
 });
 
@@ -433,7 +435,7 @@ window.goTo = (section) => {
 
 function renderAll() {
   renderOverview(); renderAssets(); renderFixedExpenses(); renderProjects();
-  renderTodos(); renderSchedule(); renderNotes(); renderGoals();
+  renderTodos(); renderNotes(); renderGoals();
   document.getElementById('section-overview').classList.add('active');
 }
 
@@ -441,15 +443,12 @@ function renderAll() {
 function renderOverview() {
   const total = state.assets.reduce((s, a) => s + Number(a.amount || 0), 0);
   const doneTodos = state.todos.filter(isDone).length;
-  const allSched = [...state.schedule, ...gcalEvents];
-  const upcomingCount = allSched.filter(e => e.date >= today()).length;
   const activeProj = state.projects.filter(p => p.status === '진행중').length;
 
   document.getElementById('overview-stats').innerHTML = [
     { label: '총 자산', value: '₩' + total.toLocaleString(), section: 'assets', color: '#4f9cf9' },
     { label: '할일 완료', value: `${doneTodos} / ${state.todos.length}`, section: 'todos', color: '#4caf7d' },
     { label: '진행중 프로젝트', value: activeProj + '개', section: 'projects', color: '#a78bfa' },
-    { label: '다가오는 일정', value: upcomingCount + '개', section: 'schedule', color: '#f0a742' },
     { label: '메모', value: state.notes.length + '개', section: 'notes', color: '#e25c5c' },
     { label: '목표', value: state.goals.length + '개', section: 'goals', color: '#888' },
   ].map(s => `<div class="stat-card" onclick="goTo('${s.section}')"><div class="stat-label">${s.label}</div><div class="stat-value" style="color:${s.color}">${s.value}</div></div>`).join('');
@@ -458,11 +457,6 @@ function renderOverview() {
   document.getElementById('overview-todos').innerHTML = pendingTodos.length
     ? pendingTodos.map(t => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${t.text}${t.type==='task'?`<span class="badge ${SCOL[t.status||'Todo']}" style="margin-left:6px;font-size:10px;padding:1px 7px">${t.status||'Todo'}</span>`:''}${t.due?`<span style="font-size:11px;color:var(--text3);margin-left:6px">${t.due}</span>`:''}</div>`).join('')
     : '<div style="font-size:13px;color:var(--text2)">모두 완료! 🎉</div>';
-
-  const todaySched = allSched.filter(e => e.date === today());
-  document.getElementById('overview-schedule').innerHTML = todaySched.length
-    ? todaySched.map(e => `<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${e.time?`<span style="color:var(--text2);margin-right:6px">${e.time}</span>`:''}${e.title}</div>`).join('')
-    : '<div style="font-size:13px;color:var(--text2)">오늘 일정 없음</div>';
 
   if (state.goals.length > 0) {
     document.getElementById('overview-goals-card').style.display = 'block';
@@ -801,21 +795,37 @@ const PLATFORMS = ['Web','iOS','Android','Desktop','CLI','기타'];
 const PHASES = ['기획','MVP','베타','출시','유지보수'];
 const PBADGE = { '기획':'badge-gray','MVP':'badge-blue','베타':'badge-purple','출시':'badge-green','유지보수':'badge-yellow' };
 
+function renderIssueBadge(p) {
+  if (!p.github) return '';
+  const parsed = parseRepoKey(p.github);
+  if (!parsed) return '';
+  const cached = githubIssueCache[parsed.key];
+  if (!cached) {
+    if (state.settings?.githubToken) return '<span style="font-size:11px;color:var(--text3)" title="로딩 중">···</span>';
+    return '';
+  }
+  if (cached.error) return `<span class="badge badge-gray" style="font-size:10px;cursor:help" title="${cached.error}">⚠ GitHub</span>`;
+  if (cached.count === 0) return '<span class="badge badge-green" style="font-size:10px">✓ 0 이슈</span>';
+  return `<span class="badge badge-blue" style="font-size:10px" title="열린 이슈 ${cached.count}개">📂 ${cached.count} 이슈</span>`;
+}
+
 function renderProjects() {
   document.getElementById('project-filters').innerHTML = ['전체',...STATUSES].map(f =>
     `<button class="filter-tab ${currentProjectFilter===f?'active':''}" onclick="setPF('${f}')">${f}</button>`
   ).join('');
   const filtered = currentProjectFilter === '전체' ? state.projects : state.projects.filter(p => p.status === currentProjectFilter);
-  document.getElementById('project-list').innerHTML = filtered.map(p =>
-    `<div class="card">
+  document.getElementById('project-list').innerHTML = filtered.map(p => {
+    const topBadges = [
+      p.platform ? `<span class="badge badge-gray">${p.platform}</span>` : '',
+      p.phase ? `<span class="badge ${PBADGE[p.phase]||'badge-gray'}">${p.phase}</span>` : '',
+      renderIssueBadge(p)
+    ].filter(Boolean).join('');
+    return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <span style="font-weight:600;font-size:15px">${p.name}</span>
         <span class="badge ${SBADGE[p.status]}">${p.status}</span>
       </div>
-      ${(p.platform||p.phase)?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-        ${p.platform?`<span class="badge badge-gray">${p.platform}</span>`:''}
-        ${p.phase?`<span class="badge ${PBADGE[p.phase]||'badge-gray'}">${p.phase}</span>`:''}
-      </div>`:''}
+      ${topBadges?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">${topBadges}</div>`:''}
       ${p.stack?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${p.stack}</div>`:''}
       ${p.desc?`<div style="font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.55">${p.desc}</div>`:''}
       <div style="margin-bottom:12px">
@@ -828,8 +838,8 @@ function renderProjects() {
         <button class="btn btn-sm" onclick="editProject('${p.id}')">수정</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">삭제</button>
       </div>
-    </div>`
-  ).join('') || '<div class="empty" style="grid-column:1/-1">프로젝트를 추가해보세요!</div>';
+    </div>`;
+  }).join('') || '<div class="empty" style="grid-column:1/-1">프로젝트를 추가해보세요!</div>';
 }
 
 function renderProjectTodos(p) {
@@ -1170,203 +1180,89 @@ window.convertToSimple = (id) => {
   renderTodos(); renderOverview(); saveData();
 };
 
-// ── SCHEDULE ──────────────────────────────────────────────────────
-const ETYPES = ['업무','미팅','개발','개인','기타'];
-const ECOLOR = { '업무':'#4f9cf9','미팅':'#4caf7d','개발':'#a78bfa','개인':'#f0a742','기타':'#888' };
+// ── GITHUB ────────────────────────────────────────────────────────
+let githubIssueCache = {}; // { 'owner/repo': { count, issues, error, fetchedAt } }
+let githubFetchInFlight = false;
 
-function renderSchedule() {
-  const sorted = [...state.schedule, ...gcalEvents].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
-  const upcoming = sorted.filter(e=>e.date>=today());
-  const past = sorted.filter(e=>e.date<today());
-  const eHTML = e => {
-    const isGcal = e.source === 'gcal';
-    const accent = isGcal ? '#888' : (ECOLOR[e.type]||'#888');
-    return `
-    <div class="list-item">
-      <div class="event-accent" style="background:${accent}"></div>
-      <div style="flex:1;margin-left:8px;min-width:0">
-        <div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.title}</span>
-          ${isGcal?'<span class="badge badge-gray" style="font-size:9px;padding:1px 6px;flex-shrink:0">G</span>':''}
-        </div>
-        <div style="font-size:12px;color:var(--text2);margin-top:2px">${e.date}${e.time?' · '+e.time:''} · <span style="color:${accent}">${isGcal?'Google Calendar':e.type}</span></div>
-      </div>
-      <div class="item-actions">
-        ${isGcal
-          ? `<a class="btn btn-sm" href="${e.htmlLink}" target="_blank" rel="noopener" style="text-decoration:none" title="Google Calendar에서 열기">↗</a>`
-          : `<button class="btn btn-sm" onclick="editSchedule('${e.id}')">수정</button>
-             <button class="btn btn-sm btn-danger" onclick="deleteSchedule('${e.id}')">삭제</button>`}
-      </div>
-    </div>`;
-  };
-  document.getElementById('schedule-upcoming-label').textContent = upcoming.length ? '다가오는 일정' : '';
-  document.getElementById('schedule-upcoming').innerHTML = upcoming.map(eHTML).join('') || '<div class="empty">일정을 추가해보세요!</div>';
-  if (past.length) {
-    document.getElementById('schedule-past-label').style.display = 'block';
-    document.getElementById('schedule-past').innerHTML = past.map(eHTML).join('');
-  } else { document.getElementById('schedule-past-label').style.display = 'none'; document.getElementById('schedule-past').innerHTML = ''; }
-}
-
-window.openScheduleForm = (id) => {
-  const e = id ? state.schedule.find(x=>x.id===id) : {};
-  document.getElementById('schedule-form-wrap').innerHTML = `
-    <div class="form-card">
-      <input id="sf-title" placeholder="일정 제목" value="${e.title||''}" style="margin-bottom:8px">
-      <div class="form-row cols-3">
-        <input type="date" id="sf-date" value="${e.date||today()}">
-        <input type="time" id="sf-time" value="${e.time||''}">
-        <select id="sf-type">${ETYPES.map(t=>`<option ${e.type===t?'selected':''}>${t}</option>`).join('')}</select>
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick="saveSchedule('${id||''}')">저장</button>
-        <button class="btn" onclick="document.getElementById('schedule-form-wrap').innerHTML=''">취소</button>
-      </div>
-    </div>`;
-};
-window.editSchedule = (id) => openScheduleForm(id);
-window.saveSchedule = (id) => {
-  const title = document.getElementById('sf-title').value.trim();
-  if (!title) return;
-  const e = { title, date: document.getElementById('sf-date').value, time: document.getElementById('sf-time').value, type: document.getElementById('sf-type').value };
-  if (id) state.schedule = state.schedule.map(x=>x.id===id?{...x,...e}:x);
-  else state.schedule.push({ id: uid(), ...e });
-  document.getElementById('schedule-form-wrap').innerHTML = '';
-  renderSchedule(); renderOverview(); saveData();
-};
-window.deleteSchedule = (id) => { state.schedule = state.schedule.filter(x=>x.id!==id); renderSchedule(); renderOverview(); saveData(); };
-
-// ── GOOGLE CALENDAR ───────────────────────────────────────────────
-function initGcalTokenClient() {
-  if (gcalTokenClient) {
-    if (localStorage.getItem('gcal-connected') === '1') requestGcalToken(true);
-    updateGcalUI();
-    return;
-  }
-  if (!window.google?.accounts?.oauth2) {
-    setTimeout(initGcalTokenClient, 400);
-    return;
-  }
-  gcalTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GCAL_CLIENT_ID,
-    scope: GCAL_SCOPE,
-    callback: (resp) => {
-      if (resp.error) {
-        console.error('GCal token error:', resp);
-        // Keep the connected flag so user sees "재연결" button instead of fresh "연결"
-        updateGcalUI();
-        return;
-      }
-      gcalAccessToken = resp.access_token;
-      localStorage.setItem('gcal-connected', '1');
-      updateGcalUI();
-      fetchGcalEvents();
-    },
-  });
-  if (localStorage.getItem('gcal-connected') === '1') requestGcalToken(true);
-  updateGcalUI();
-}
-
-function requestGcalToken(silent) {
-  if (!gcalTokenClient) return;
-  gcalTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' });
-}
-
-function updateGcalStatus(text) {
-  const el = document.getElementById('gcal-status');
-  if (el) el.textContent = text || '';
-}
-
-function updateGcalUI() {
-  const connectBtn = document.getElementById('gcal-connect-btn');
-  const syncBtn = document.getElementById('gcal-sync-btn');
-  const disconnectBtn = document.getElementById('gcal-disconnect-btn');
-  if (!connectBtn) return;
-  const isConnected = !!gcalAccessToken;
-  const wasConnected = localStorage.getItem('gcal-connected') === '1';
-  connectBtn.style.display = isConnected ? 'none' : '';
-  syncBtn.style.display = isConnected ? '' : 'none';
-  disconnectBtn.style.display = isConnected ? '' : 'none';
-  if (isConnected) {
-    connectBtn.textContent = '📅 캘린더 연결';
-    connectBtn.title = '';
-    updateGcalStatus(gcalLastSync ? `📅 ${gcalEvents.length}개 · ${formatTs(gcalLastSync.getTime())}` : `📅 ${gcalEvents.length}개`);
-  } else if (wasConnected) {
-    connectBtn.textContent = '🔁 재연결';
-    connectBtn.title = '세션 만료 - 클릭하여 다시 연결';
-    updateGcalStatus('재연결 필요');
-  } else {
-    connectBtn.textContent = '📅 캘린더 연결';
-    connectBtn.title = '';
-    updateGcalStatus('');
-  }
-}
-
-window.connectGcal = () => requestGcalToken(false);
-
-window.disconnectGcal = () => {
-  if (!confirm('Google Calendar 연결을 해제할까요?')) return;
-  if (gcalAccessToken && window.google?.accounts?.oauth2) {
-    google.accounts.oauth2.revoke(gcalAccessToken, () => {});
-  }
-  gcalAccessToken = null;
-  gcalEvents = [];
-  gcalLastSync = null;
-  localStorage.removeItem('gcal-connected');
-  updateGcalUI();
-  renderSchedule();
-  renderOverview();
+const parseRepoKey = (url) => {
+  if (!url) return null;
+  const m = url.match(/github\.com[:/]+([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/|$|\?|#)/);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], key: `${m[1]}/${m[2]}` };
 };
 
-window.fetchGcalEvents = async () => {
-  if (!gcalAccessToken) return;
-  updateGcalStatus('동기화 중...');
+async function fetchIssuesForProject(project) {
+  const token = state.settings?.githubToken;
+  if (!token) return;
+  const parsed = parseRepoKey(project.github);
+  if (!parsed) return;
   try {
-    const timeMin = new Date();
-    timeMin.setDate(timeMin.getDate() - 7);
-    const timeMax = new Date();
-    timeMax.setDate(timeMax.getDate() + 60);
-    const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
-    url.searchParams.set('timeMin', timeMin.toISOString());
-    url.searchParams.set('timeMax', timeMax.toISOString());
-    url.searchParams.set('singleEvents', 'true');
-    url.searchParams.set('orderBy', 'startTime');
-    url.searchParams.set('maxResults', '150');
-
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${gcalAccessToken}` } });
-    if (resp.status === 401) {
-      gcalAccessToken = null;
-      requestGcalToken(true);
+    const resp = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}/issues?state=open&per_page=50`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (!resp.ok) {
+      const errText = resp.status === 404 ? 'repo 없음' : resp.status === 401 ? '토큰 인증 실패' : `HTTP ${resp.status}`;
+      githubIssueCache[parsed.key] = { error: errText, fetchedAt: Date.now() };
       return;
     }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    gcalEvents = (data.items || []).filter(it => it.status !== 'cancelled').map(item => {
-      let date, time;
-      if (item.start.dateTime) {
-        const d = new Date(item.start.dateTime);
-        date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      } else {
-        date = item.start.date;
-        time = '';
-      }
-      return {
-        id: 'gcal_' + item.id,
-        title: item.summary || '(제목 없음)',
-        date, time,
-        type: '캘린더',
-        source: 'gcal',
-        htmlLink: item.htmlLink,
-        description: item.description || ''
-      };
-    });
-    gcalLastSync = new Date();
-    updateGcalUI();
-    renderSchedule();
-    renderOverview();
+    const items = await resp.json();
+    const issues = items.filter(i => !i.pull_request);
+    githubIssueCache[parsed.key] = { count: issues.length, issues, fetchedAt: Date.now() };
   } catch (e) {
-    console.error('GCal fetch error:', e);
-    updateGcalStatus('동기화 오류');
+    githubIssueCache[parsed.key] = { error: e.message, fetchedAt: Date.now() };
+  }
+}
+
+async function fetchAllProjectIssues() {
+  const token = state.settings?.githubToken;
+  if (!token || githubFetchInFlight) return;
+  githubFetchInFlight = true;
+  try {
+    const projects = state.projects.filter(p => p.github && parseRepoKey(p.github));
+    await Promise.all(projects.map(fetchIssuesForProject));
+    renderProjects();
+  } finally {
+    githubFetchInFlight = false;
+  }
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────────
+window.openSettings = () => {
+  document.getElementById('settings-gh-token').value = state.settings?.githubToken || '';
+  document.getElementById('settings-gh-status').innerHTML = state.settings?.githubToken ? '<span style="color:var(--success)">토큰 저장됨</span>' : '';
+  document.getElementById('settings-modal').classList.add('open');
+};
+
+window.closeSettings = () => {
+  document.getElementById('settings-modal').classList.remove('open');
+};
+
+window.saveSettings = async () => {
+  const token = document.getElementById('settings-gh-token').value.trim();
+  const statusEl = document.getElementById('settings-gh-status');
+
+  if (!token) {
+    state.settings.githubToken = '';
+    githubIssueCache = {};
+    await saveData();
+    statusEl.innerHTML = '<span style="color:var(--text2)">토큰이 삭제되었습니다</span>';
+    renderProjects();
+    return;
+  }
+
+  statusEl.innerHTML = '<span style="color:var(--text2)">연결 테스트 중...</span>';
+  try {
+    const resp = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (!resp.ok) throw new Error(resp.status === 401 ? '인증 실패 - 토큰이 잘못되었거나 만료됨' : `HTTP ${resp.status}`);
+    const user = await resp.json();
+    state.settings.githubToken = token;
+    await saveData();
+    statusEl.innerHTML = `<span style="color:var(--success)">✓ <b>${user.login}</b> 로 연결됨</span>`;
+    fetchAllProjectIssues();
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:var(--danger)">✗ ${e.message}</span>`;
   }
 };
 
