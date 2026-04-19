@@ -537,15 +537,40 @@ const monthlyOf = (e) => {
   return amt;
 };
 
-const isInstallmentDone = (e) => e.type === '할부' && Number(e.currentInstallment||0) >= Number(e.totalInstallments||0) && Number(e.totalInstallments||0) > 0;
+const currentInstallmentOf = (e) => {
+  if (e.type !== '할부') return 0;
+  const total = Number(e.totalInstallments||0);
+  if (e.startDate) {
+    const [y, m] = e.startDate.split('-').map(Number);
+    if (!y || !m) return Number(e.currentInstallment||0);
+    const now = new Date();
+    const monthDiff = (now.getFullYear() - y) * 12 + (now.getMonth() - (m - 1));
+    const payDay = Number(e.payDay||0);
+    const payHappenedThisMonth = !payDay || now.getDate() >= payDay;
+    const elapsed = monthDiff + (payHappenedThisMonth ? 1 : 0);
+    return Math.max(0, Math.min(elapsed, total));
+  }
+  return Number(e.currentInstallment||0);
+};
+
+const isInstallmentDone = (e) => e.type === '할부' && currentInstallmentOf(e) >= Number(e.totalInstallments||0) && Number(e.totalInstallments||0) > 0;
 
 const remainingDebtOf = (e) => {
   if (e.type === '할부') {
-    const remain = Math.max(0, Number(e.totalInstallments||0) - Number(e.currentInstallment||0));
+    const remain = Math.max(0, Number(e.totalInstallments||0) - currentInstallmentOf(e));
     return remain * Number(e.amount||0);
   }
   if (e.type === '대출') return Number(e.remainingPrincipal||0);
   return 0;
+};
+
+const inferStartDate = (e) => {
+  if (e.startDate) return e.startDate;
+  const cur = Number(e.currentInstallment||0);
+  if (!cur) return '';
+  const d = new Date();
+  d.setMonth(d.getMonth() - (cur - 1));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 };
 
 const nextPayDays = (e) => {
@@ -610,7 +635,7 @@ function renderFixedExpenses() {
     let extraInfo = '';
     if (e.type === '할부') {
       const total = Number(e.totalInstallments||0);
-      const cur = Number(e.currentInstallment||0);
+      const cur = currentInstallmentOf(e);
       const remain = Math.max(0, total - cur);
       extraInfo = ` · ${cur}/${total}회 · 남은 ₩${(remain * Number(e.amount||0)).toLocaleString()}`;
     } else if (e.type === '대출') {
@@ -653,9 +678,12 @@ window.openFixedExpenseForm = (id) => {
         <input type="number" id="fef-month" placeholder="결제 월 (1-12)" value="${e.payMonth||''}" min="1" max="12" style="display:${e.frequency==='매년'?'':'none'}">
         <input type="number" id="fef-day" placeholder="결제일 (1-31)" value="${e.payDay||''}" min="1" max="31">
       </div>
-      <div id="fef-installment-row" class="form-row cols-2" style="display:${e.type==='할부'?'grid':'none'}">
-        <input type="number" id="fef-cur" placeholder="현재 회차" value="${e.currentInstallment||''}" min="0">
-        <input type="number" id="fef-total" placeholder="총 회차" value="${e.totalInstallments||''}" min="1">
+      <div id="fef-installment-wrap" style="display:${e.type==='할부'?'block':'none'};margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px">시작년월 = 첫 결제달 (예: 카드 명세서 4/24면 4개월 전)</div>
+        <div class="form-row cols-2" style="margin-bottom:0">
+          <input type="month" id="fef-start" value="${inferStartDate(e)}" title="첫 결제가 이뤄진 월">
+          <input type="number" id="fef-total" placeholder="총 회차" value="${e.totalInstallments||''}" min="1">
+        </div>
       </div>
       <div id="fef-loan-row" style="display:${e.type==='대출'?'block':'none'};margin-bottom:8px">
         <input type="number" id="fef-principal" placeholder="잔여 원금" value="${e.remainingPrincipal||''}" min="0">
@@ -675,7 +703,7 @@ window.onFEFreqChange = () => {
 
 window.onFETypeChange = () => {
   const type = document.getElementById('fef-type').value;
-  document.getElementById('fef-installment-row').style.display = type === '할부' ? 'grid' : 'none';
+  document.getElementById('fef-installment-wrap').style.display = type === '할부' ? 'block' : 'none';
   document.getElementById('fef-loan-row').style.display = type === '대출' ? 'block' : 'none';
   if (type === '할부' || type === '대출') {
     const catSelect = document.getElementById('fef-category');
@@ -702,7 +730,7 @@ window.saveFixedExpense = (id) => {
     active: true,
   };
   if (type === '할부') {
-    e.currentInstallment = Number(document.getElementById('fef-cur').value) || 0;
+    e.startDate = document.getElementById('fef-start').value || '';
     e.totalInstallments = Number(document.getElementById('fef-total').value) || 0;
   } else if (type === '대출') {
     e.remainingPrincipal = Number(document.getElementById('fef-principal').value) || 0;
