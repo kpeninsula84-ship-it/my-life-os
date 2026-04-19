@@ -91,6 +91,7 @@
     .badge-blue { background: rgba(79,156,249,0.12); color: #4f9cf9; }
     .badge-green { background: rgba(76,175,125,0.12); color: #4caf7d; }
     .badge-yellow { background: rgba(240,167,66,0.12); color: #f0a742; }
+    .badge-purple { background: rgba(167,139,250,0.12); color: #a78bfa; }
     .badge-gray { background: var(--bg3); color: var(--text2); }
 
     /* Filter tabs */
@@ -473,6 +474,9 @@ window.deleteAsset = (id) => { state.assets = state.assets.filter(x => x.id !== 
 // ── PROJECTS ──────────────────────────────────────────────────────
 const STATUSES = ['계획중','진행중','완료','보류'];
 const SBADGE = { '계획중':'badge-blue','진행중':'badge-yellow','완료':'badge-green','보류':'badge-gray' };
+const PLATFORMS = ['Web','iOS','Android','Desktop','CLI','기타'];
+const PHASES = ['기획','MVP','베타','출시','유지보수'];
+const PBADGE = { '기획':'badge-gray','MVP':'badge-blue','베타':'badge-purple','출시':'badge-green','유지보수':'badge-yellow' };
 
 function renderProjects() {
   document.getElementById('project-filters').innerHTML = ['전체',...STATUSES].map(f =>
@@ -485,18 +489,42 @@ function renderProjects() {
         <span style="font-weight:600;font-size:15px">${p.name}</span>
         <span class="badge ${SBADGE[p.status]}">${p.status}</span>
       </div>
+      ${(p.platform||p.phase)?`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        ${p.platform?`<span class="badge badge-gray">${p.platform}</span>`:''}
+        ${p.phase?`<span class="badge ${PBADGE[p.phase]||'badge-gray'}">${p.phase}</span>`:''}
+      </div>`:''}
       ${p.stack?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${p.stack}</div>`:''}
       ${p.desc?`<div style="font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.55">${p.desc}</div>`:''}
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px"><span>진행률</span><span>${p.progress}%</span></div>
         <div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div>
       </div>
-      <div style="display:flex;gap:6px">
+      ${renderProjectTodos(p)}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${p.github?`<a class="btn btn-sm" href="${p.github}" target="_blank" rel="noopener" style="text-decoration:none">GitHub ↗</a>`:''}
         <button class="btn btn-sm" onclick="editProject('${p.id}')">수정</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">삭제</button>
       </div>
     </div>`
   ).join('') || '<div class="empty" style="grid-column:1/-1">프로젝트를 추가해보세요!</div>';
+}
+
+function renderProjectTodos(p) {
+  const todos = p.todos || [];
+  const done = todos.filter(t => t.done).length;
+  return `<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:8px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:6px">
+      <span>📋 TODO</span><span>${done}/${todos.length}</span>
+    </div>
+    ${todos.map(t => `
+      <div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+        <input type="checkbox" ${t.done?'checked':''} onchange="toggleProjectTodo('${p.id}','${t.id}')" style="cursor:pointer">
+        <span style="flex:1;font-size:13px;${t.done?'text-decoration:line-through;color:var(--text2)':''}">${t.text}</span>
+        <button onclick="deleteProjectTodo('${p.id}','${t.id}')" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px;padding:0 4px;line-height:1">×</button>
+      </div>
+    `).join('')}
+    <input id="pt-input-${p.id}" placeholder="+ 항목 추가 (Enter)" style="width:100%;font-size:12px;padding:4px 8px;margin-top:6px" onkeydown="if(event.key==='Enter')addProjectTodo('${p.id}')">
+  </div>`;
 }
 
 window.setPF = (f) => { currentProjectFilter = f; renderProjects(); };
@@ -507,8 +535,13 @@ window.openProjectForm = (id) => {
       <input id="pf-name" placeholder="프로젝트 이름" value="${p.name||''}" style="margin-bottom:8px;font-size:15px">
       <div class="form-row cols-2">
         <select id="pf-status">${STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
+        <select id="pf-phase"><option value="">Phase 선택</option>${PHASES.map(s=>`<option ${p.phase===s?'selected':''}>${s}</option>`).join('')}</select>
+      </div>
+      <div class="form-row cols-2">
+        <select id="pf-platform"><option value="">플랫폼 선택</option>${PLATFORMS.map(s=>`<option ${p.platform===s?'selected':''}>${s}</option>`).join('')}</select>
         <input id="pf-stack" placeholder="스택 (React, Node.js...)" value="${p.stack||''}">
       </div>
+      <input id="pf-github" placeholder="GitHub 링크 (https://github.com/...)" value="${p.github||''}" style="margin-bottom:8px">
       <textarea id="pf-desc" placeholder="프로젝트 설명" style="height:70px;resize:none;margin-bottom:8px">${p.desc||''}</textarea>
       <div style="margin-bottom:4px"><span class="form-label">진행률: <span id="pf-pv">${p.progress||0}</span>%</span></div>
       <input type="range" id="pf-progress" min="0" max="100" value="${p.progress||0}" oninput="document.getElementById('pf-pv').textContent=this.value" style="margin-bottom:4px">
@@ -522,13 +555,44 @@ window.editProject = (id) => openProjectForm(id);
 window.saveProject = (id) => {
   const name = document.getElementById('pf-name').value.trim();
   if (!name) return;
-  const p = { name, status: document.getElementById('pf-status').value, stack: document.getElementById('pf-stack').value, desc: document.getElementById('pf-desc').value, progress: Number(document.getElementById('pf-progress').value) };
+  const p = {
+    name,
+    status: document.getElementById('pf-status').value,
+    phase: document.getElementById('pf-phase').value,
+    platform: document.getElementById('pf-platform').value,
+    stack: document.getElementById('pf-stack').value,
+    github: document.getElementById('pf-github').value.trim(),
+    desc: document.getElementById('pf-desc').value,
+    progress: Number(document.getElementById('pf-progress').value)
+  };
   if (id) state.projects = state.projects.map(x => x.id === id ? {...x,...p} : x);
-  else state.projects.push({ id: uid(), ...p });
+  else state.projects.push({ id: uid(), todos: [], ...p });
   document.getElementById('project-form-wrap').innerHTML = '';
   renderProjects(); renderOverview(); saveData();
 };
 window.deleteProject = (id) => { state.projects = state.projects.filter(x => x.id !== id); renderProjects(); renderOverview(); saveData(); };
+window.toggleProjectTodo = (pid, tid) => {
+  const proj = state.projects.find(x => x.id === pid);
+  if (!proj) return;
+  proj.todos = (proj.todos||[]).map(t => t.id === tid ? {...t, done: !t.done} : t);
+  renderProjects(); saveData();
+};
+window.deleteProjectTodo = (pid, tid) => {
+  const proj = state.projects.find(x => x.id === pid);
+  if (!proj) return;
+  proj.todos = (proj.todos||[]).filter(t => t.id !== tid);
+  renderProjects(); saveData();
+};
+window.addProjectTodo = (pid) => {
+  const input = document.getElementById('pt-input-' + pid);
+  const text = input.value.trim();
+  if (!text) return;
+  const proj = state.projects.find(x => x.id === pid);
+  if (!proj) return;
+  proj.todos = [...(proj.todos||[]), { id: uid(), text, done: false }];
+  renderProjects(); saveData();
+  setTimeout(() => document.getElementById('pt-input-' + pid)?.focus(), 0);
+};
 
 // ── TODOS ─────────────────────────────────────────────────────────
 const PCOL = { '높음':'var(--danger)','중간':'var(--warning)','낮음':'var(--success)' };
